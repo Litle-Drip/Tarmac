@@ -504,7 +504,7 @@ export default function AirportDetail() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-muted-foreground/50" />
-            <span className="text-xs text-muted-foreground">GateCheck</span>
+            <span className="text-xs text-muted-foreground">Tarmac</span>
           </div>
           <p className="text-xs text-muted-foreground">
             Wait times are crowdsourced and may not reflect actual conditions.

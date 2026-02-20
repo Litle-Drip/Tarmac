@@ -37,11 +37,11 @@ function AnimatedCounter({ value, suffix = "" }: { value: number; suffix?: strin
 
 function HeroSection({ searchQuery, onSearchChange }: { searchQuery: string; onSearchChange: (v: string) => void }) {
   return (
-    <div className="relative overflow-hidden bg-gradient-to-br from-blue-600 via-primary to-indigo-700 dark:from-blue-800 dark:via-primary dark:to-indigo-900">
+    <div className="relative overflow-hidden bg-gradient-to-br from-slate-500 via-primary to-slate-600 dark:from-slate-700 dark:via-primary dark:to-slate-800">
       <div className="absolute inset-0">
         <div className="absolute top-0 left-1/4 w-96 h-96 rounded-full bg-white/5 blur-3xl animate-pulse" style={{ animationDuration: '4s' }} />
-        <div className="absolute bottom-0 right-1/4 w-80 h-80 rounded-full bg-blue-300/10 blur-3xl animate-pulse" style={{ animationDuration: '6s', animationDelay: '1s' }} />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-indigo-400/5 blur-3xl" />
+        <div className="absolute bottom-0 right-1/4 w-80 h-80 rounded-full bg-slate-300/10 blur-3xl animate-pulse" style={{ animationDuration: '6s', animationDelay: '1s' }} />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-slate-400/5 blur-3xl" />
       </div>
       <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '32px 32px' }} />
 
@@ -55,7 +55,7 @@ function HeroSection({ searchQuery, onSearchChange }: { searchQuery: string; onS
           <div className="p-2.5 rounded-md bg-white/15 backdrop-blur-sm">
             <ShieldCheck className="h-7 w-7 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">GateCheck</h1>
+          <h1 className="text-3xl font-bold text-white tracking-tight">Tarmac</h1>
         </motion.div>
         <motion.p
           initial={{ opacity: 0, y: 10 }}
@@ -112,7 +112,7 @@ function StatsBar({ airports }: { airports: AirportWithStats[] }) {
       <Card className="p-5">
         <div className="grid grid-cols-3 gap-4">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-md bg-blue-50 dark:bg-blue-950/50">
+            <div className="p-2.5 rounded-md bg-slate-100 dark:bg-slate-800/50">
               <Activity className="h-4 w-4 text-primary" />
             </div>
             <div>
@@ -123,7 +123,7 @@ function StatsBar({ airports }: { airports: AirportWithStats[] }) {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-md bg-blue-50 dark:bg-blue-950/50">
+            <div className="p-2.5 rounded-md bg-slate-100 dark:bg-slate-800/50">
               <MapPin className="h-4 w-4 text-primary" />
             </div>
             <div>
@@ -134,7 +134,7 @@ function StatsBar({ airports }: { airports: AirportWithStats[] }) {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-md bg-blue-50 dark:bg-blue-950/50">
+            <div className="p-2.5 rounded-md bg-slate-100 dark:bg-slate-800/50">
               <TrendingUp className="h-4 w-4 text-primary" />
             </div>
             <div>
@@ -312,7 +312,7 @@ export default function Home() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-muted-foreground/50" />
-            <span className="text-xs text-muted-foreground" data-testid="text-footer-brand">GateCheck</span>
+            <span className="text-xs text-muted-foreground" data-testid="text-footer-brand">Tarmac</span>
           </div>
           <p className="text-xs text-muted-foreground" data-testid="text-footer-disclaimer">
             Wait times are crowdsourced and may not reflect actual conditions.

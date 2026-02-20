@@ -1,4 +1,4 @@
-# GateCheck - Airport Security Wait Times
+# Tarmac - Airport Security Wait Times
 
 ## Overview
 A crowdsourced airport security wait time app (like Waze for TSA lines). Users can browse airports, see current wait times, and submit their own reports to help fellow travelers.
