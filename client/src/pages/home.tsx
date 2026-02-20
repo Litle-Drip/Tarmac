@@ -2,13 +2,13 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Plane, Clock, Users, TrendingUp, ChevronRight, MapPin, ShieldCheck, Activity } from "lucide-react";
+import { Search, Plane, Clock, Users, TrendingUp, ChevronRight, MapPin, ShieldCheck, Activity, BarChart3, Signal } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { AirportWithStats } from "@shared/schema";
-import { getWaitTimeColor, getWaitTimeBg, getWaitTimeLabel, formatMinutes, timeAgo, getWaitTimeDot } from "@/lib/utils";
+import { getWaitTimeColor, getWaitTimeBg, getWaitTimeLabel, formatMinutes, timeAgo, getWaitTimeDot, getDataSourceLabel, getDataSourceStyle } from "@/lib/utils";
 
 function AnimatedCounter({ value, suffix = "" }: { value: number; suffix?: string }) {
   const [display, setDisplay] = useState(0);
@@ -150,6 +150,16 @@ function StatsBar({ airports }: { airports: AirportWithStats[] }) {
   );
 }
 
+function DataSourceBadge({ source }: { source: "community" | "estimated" | "blended" }) {
+  const Icon = source === "community" ? Users : source === "estimated" ? BarChart3 : Signal;
+  return (
+    <Badge variant="outline" className={`text-[10px] font-medium ${getDataSourceStyle(source)}`} data-testid={`badge-source-${source}`}>
+      <Icon className="h-2.5 w-2.5 mr-1" />
+      {getDataSourceLabel(source)}
+    </Badge>
+  );
+}
+
 function AirportCard({ airport, index }: { airport: AirportWithStats; index: number }) {
   const [, setLocation] = useLocation();
   const hasData = airport.reportCount > 0;
@@ -162,7 +172,7 @@ function AirportCard({ airport, index }: { airport: AirportWithStats; index: num
       transition={{ duration: 0.3, delay: Math.min(index * 0.04, 0.4) }}
     >
       <Card
-        className={`p-4 cursor-pointer hover-elevate active-elevate-2 transition-all ${!hasData ? 'opacity-60' : ''}`}
+        className="p-4 cursor-pointer hover-elevate active-elevate-2 transition-all"
         onClick={() => setLocation(`/airport/${airport.code}`)}
         data-testid={`card-airport-${airport.code}`}
       >
@@ -172,9 +182,7 @@ function AirportCard({ airport, index }: { airport: AirportWithStats; index: num
               <span className={`text-xl font-bold leading-none ${getWaitTimeColor(airport.avgWaitMinutes)}`}>
                 {formatMinutes(airport.avgWaitMinutes).replace(" min", "")}
               </span>
-              {hasData && (
-                <span className={`text-[10px] font-medium mt-0.5 ${getWaitTimeColor(airport.avgWaitMinutes)}`}>min</span>
-              )}
+              <span className={`text-[10px] font-medium mt-0.5 ${getWaitTimeColor(airport.avgWaitMinutes)}`}>min</span>
               {isRecent && (
                 <span className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full ${getWaitTimeDot(airport.avgWaitMinutes)} ring-2 ring-card`} />
               )}
@@ -182,11 +190,10 @@ function AirportCard({ airport, index }: { airport: AirportWithStats; index: num
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="font-bold text-base">{airport.code}</h3>
-                {hasData && (
-                  <Badge variant="secondary" className="text-[10px] font-semibold uppercase tracking-wider">
-                    {getWaitTimeLabel(airport.avgWaitMinutes)}
-                  </Badge>
-                )}
+                <Badge variant="secondary" className="text-[10px] font-semibold uppercase tracking-wider">
+                  {getWaitTimeLabel(airport.avgWaitMinutes)}
+                </Badge>
+                <DataSourceBadge source={airport.dataSource} />
               </div>
               <p className="text-sm text-muted-foreground truncate mt-0.5">{airport.name}</p>
               <p className="text-xs text-muted-foreground">{airport.city}, {airport.state}</p>

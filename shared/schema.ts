@@ -39,4 +39,5 @@ export type AirportWithStats = Airport & {
   avgWaitMinutes: number | null;
   reportCount: number;
   latestReport: string | null;
+  dataSource: "community" | "estimated" | "blended";
 };

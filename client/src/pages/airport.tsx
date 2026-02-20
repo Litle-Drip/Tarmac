@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
 import { motion } from "framer-motion";
-import { ArrowLeft, Clock, Users, Plus, Plane, TrendingUp, Shield, Zap, ShieldCheck, MapPin } from "lucide-react";
+import { ArrowLeft, Clock, Users, Plus, Plane, TrendingUp, Shield, Zap, ShieldCheck, MapPin, BarChart3, Signal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,13 +15,14 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { AirportWithStats, WaitTimeReport } from "@shared/schema";
-import { getWaitTimeColor, getWaitTimeBg, getWaitTimeLabel, formatMinutes, timeAgo, getWaitTimeHex, getWaitTimeDot } from "@/lib/utils";
+import { getWaitTimeColor, getWaitTimeBg, getWaitTimeLabel, formatMinutes, timeAgo, getWaitTimeHex, getWaitTimeDot, getDataSourceLabel, getDataSourceStyle } from "@/lib/utils";
 
-function AnimatedGauge({ minutes }: { minutes: number | null }) {
+function AnimatedGauge({ minutes, dataSource }: { minutes: number | null; dataSource: "community" | "estimated" | "blended" }) {
   const pct = minutes !== null ? Math.min((minutes / 60) * 100, 100) : 0;
   const circumference = 2 * Math.PI * 44;
   const strokeDashoffset = circumference - (pct / 100) * circumference;
   const color = getWaitTimeHex(minutes);
+  const SourceIcon = dataSource === "community" ? Users : dataSource === "estimated" ? BarChart3 : Signal;
 
   return (
     <div className="flex flex-col items-center gap-3">
@@ -55,9 +56,15 @@ function AnimatedGauge({ minutes }: { minutes: number | null }) {
           </div>
         </div>
       </div>
-      <Badge variant="secondary" className="text-xs font-semibold uppercase tracking-wider">
-        {getWaitTimeLabel(minutes)}
-      </Badge>
+      <div className="flex items-center gap-2">
+        <Badge variant="secondary" className="text-xs font-semibold uppercase tracking-wider">
+          {getWaitTimeLabel(minutes)}
+        </Badge>
+        <Badge variant="outline" className={`text-[10px] font-medium ${getDataSourceStyle(dataSource)}`} data-testid={`badge-detail-source-${dataSource}`}>
+          <SourceIcon className="h-2.5 w-2.5 mr-1" />
+          {getDataSourceLabel(dataSource)}
+        </Badge>
+      </div>
     </div>
   );
 }
@@ -433,7 +440,7 @@ export default function AirportDetail() {
         >
           <Card className="p-6">
             <div className="flex flex-col sm:flex-row items-center gap-8">
-              <AnimatedGauge minutes={airport.avgWaitMinutes} />
+              <AnimatedGauge minutes={airport.avgWaitMinutes} dataSource={airport.dataSource} />
               <div className="flex-1 w-full">
                 <h3 className="text-sm font-semibold text-muted-foreground mb-4 uppercase tracking-wider">By Line Type</h3>
                 <div className="space-y-4">

@@ -1,6 +1,9 @@
 import { eq, desc, sql, and, gte } from "drizzle-orm";
 import { db } from "./db";
 import { airports, waitTimeReports, type InsertAirport, type Airport, type InsertWaitTimeReport, type WaitTimeReport, type AirportWithStats } from "@shared/schema";
+import { estimateWaitTime } from "./estimator";
+
+const MIN_COMMUNITY_REPORTS = 3;
 
 export interface IStorage {
   getAirports(): Promise<AirportWithStats[]>;
@@ -9,6 +12,27 @@ export interface IStorage {
   getReportsByAirportCode(code: string): Promise<WaitTimeReport[]>;
   createReport(report: InsertWaitTimeReport): Promise<WaitTimeReport>;
   getAirportCount(): Promise<number>;
+}
+
+function blendWaitTime(
+  airport: Airport,
+  communityAvg: number | null,
+  reportCount: number
+): { avgWaitMinutes: number; dataSource: "community" | "estimated" | "blended" } {
+  const estimate = estimateWaitTime(airport);
+
+  if (communityAvg === null || reportCount === 0) {
+    return { avgWaitMinutes: estimate, dataSource: "estimated" };
+  }
+
+  if (reportCount >= MIN_COMMUNITY_REPORTS) {
+    return { avgWaitMinutes: Math.round(communityAvg), dataSource: "community" };
+  }
+
+  const communityWeight = reportCount / MIN_COMMUNITY_REPORTS;
+  const estimateWeight = 1 - communityWeight;
+  const blended = Math.round(communityAvg * communityWeight + estimate * estimateWeight);
+  return { avgWaitMinutes: blended, dataSource: "blended" };
 }
 
 export class DatabaseStorage implements IStorage {
@@ -24,7 +48,7 @@ export class DatabaseStorage implements IStorage {
         state: airports.state,
         terminal_count: airports.terminal_count,
         avgWaitMinutes: sql<number>`coalesce(avg(case when ${waitTimeReports.reportedAt} >= ${twentyFourHoursAgo} then ${waitTimeReports.waitMinutes} end), null)`.as("avg_wait"),
-        reportCount: sql<number>`count(${waitTimeReports.id})::int`.as("report_count"),
+        reportCount: sql<number>`count(case when ${waitTimeReports.reportedAt} >= ${twentyFourHoursAgo} then 1 end)::int`.as("report_count"),
         latestReport: sql<string>`max(${waitTimeReports.reportedAt})::text`.as("latest_report"),
       })
       .from(airports)
@@ -32,11 +56,27 @@ export class DatabaseStorage implements IStorage {
       .groupBy(airports.id)
       .orderBy(airports.code);
 
-    return result.map((r) => ({
-      ...r,
-      avgWaitMinutes: r.avgWaitMinutes !== null ? Math.round(Number(r.avgWaitMinutes)) : null,
-      reportCount: Number(r.reportCount),
-    }));
+    return result.map((r) => {
+      const reportCount = Number(r.reportCount) || 0;
+      const communityAvg = r.avgWaitMinutes !== null ? Number(r.avgWaitMinutes) : null;
+      const airport: Airport = {
+        id: r.id,
+        code: r.code,
+        name: r.name,
+        city: r.city,
+        state: r.state,
+        terminal_count: r.terminal_count,
+      };
+      const { avgWaitMinutes, dataSource } = blendWaitTime(airport, communityAvg, reportCount);
+
+      return {
+        ...airport,
+        avgWaitMinutes,
+        reportCount,
+        latestReport: r.latestReport,
+        dataSource,
+      };
+    });
   }
 
   async getAirportByCode(code: string): Promise<AirportWithStats | undefined> {
@@ -51,7 +91,7 @@ export class DatabaseStorage implements IStorage {
         state: airports.state,
         terminal_count: airports.terminal_count,
         avgWaitMinutes: sql<number>`coalesce(avg(case when ${waitTimeReports.reportedAt} >= ${twentyFourHoursAgo} then ${waitTimeReports.waitMinutes} end), null)`.as("avg_wait"),
-        reportCount: sql<number>`count(${waitTimeReports.id})::int`.as("report_count"),
+        reportCount: sql<number>`count(case when ${waitTimeReports.reportedAt} >= ${twentyFourHoursAgo} then 1 end)::int`.as("report_count"),
         latestReport: sql<string>`max(${waitTimeReports.reportedAt})::text`.as("latest_report"),
       })
       .from(airports)
@@ -62,10 +102,24 @@ export class DatabaseStorage implements IStorage {
     if (result.length === 0) return undefined;
 
     const r = result[0];
+    const reportCount = Number(r.reportCount) || 0;
+    const communityAvg = r.avgWaitMinutes !== null ? Number(r.avgWaitMinutes) : null;
+    const airport: Airport = {
+      id: r.id,
+      code: r.code,
+      name: r.name,
+      city: r.city,
+      state: r.state,
+      terminal_count: r.terminal_count,
+    };
+    const { avgWaitMinutes, dataSource } = blendWaitTime(airport, communityAvg, reportCount);
+
     return {
-      ...r,
-      avgWaitMinutes: r.avgWaitMinutes !== null ? Math.round(Number(r.avgWaitMinutes)) : null,
-      reportCount: Number(r.reportCount),
+      ...airport,
+      avgWaitMinutes,
+      reportCount,
+      latestReport: r.latestReport,
+      dataSource,
     };
   }
 

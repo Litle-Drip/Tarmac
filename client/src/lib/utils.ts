@@ -63,3 +63,19 @@ export function getWaitTimeHex(minutes: number | null): string {
   if (minutes <= 35) return "#f97316";
   return "#ef4444";
 }
+
+export function getDataSourceLabel(source: "community" | "estimated" | "blended"): string {
+  switch (source) {
+    case "community": return "Community";
+    case "estimated": return "Estimated";
+    case "blended": return "Blended";
+  }
+}
+
+export function getDataSourceStyle(source: "community" | "estimated" | "blended"): string {
+  switch (source) {
+    case "community": return "text-emerald-600 dark:text-emerald-400";
+    case "estimated": return "text-muted-foreground";
+    case "blended": return "text-primary";
+  }
+}
