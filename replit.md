@@ -34,6 +34,14 @@ A crowdsourced airport security wait time app (like Waze for TSA lines). Users c
 - Blending logic: <3 community reports = blended with estimates, 3+ reports = pure community data, 0 reports = estimated only
 - AirportWithStats includes `dataSource` field: "community" | "estimated" | "blended"
 
+## Mobile & UX Features
+- **Dark mode**: ThemeProvider with localStorage persistence; toggle in hero (home) and header (detail)
+- **Sticky search**: IntersectionObserver-based sticky search bar appears when hero search scrolls out of view
+- **Sticky report button**: Fixed floating "Report Wait Time" button on mobile airport detail pages
+- **Bottom sheet**: Report form uses Drawer (vaul) on mobile, Dialog on desktop
+- **Pull-to-refresh**: Touch gesture with visual spinner on both pages
+- **Touch targets**: Minimum 44px hit areas on buttons/inputs, active:scale feedback on cards
+
 ## Running
 - `npm run dev` starts both backend and frontend on port 5000
 - `npm run db:push` syncs database schema

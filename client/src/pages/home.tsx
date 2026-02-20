@@ -1,12 +1,15 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Plane, Clock, Users, TrendingUp, ChevronRight, MapPin, ShieldCheck, Activity, BarChart3, Signal } from "lucide-react";
+import { Search, Plane, Clock, Users, TrendingUp, ChevronRight, MapPin, ShieldCheck, Activity, BarChart3, Signal, Sun, Moon, RefreshCw, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useTheme } from "@/components/theme-provider";
+import { queryClient } from "@/lib/queryClient";
 import type { AirportWithStats } from "@shared/schema";
 import { getWaitTimeColor, getWaitTimeBg, getWaitTimeLabel, formatMinutes, timeAgo, getWaitTimeDot, getDataSourceLabel, getDataSourceStyle, getFreshnessInfo } from "@/lib/utils";
 
@@ -35,7 +38,64 @@ function AnimatedCounter({ value, suffix = "" }: { value: number; suffix?: strin
   return <>{display}{suffix}</>;
 }
 
-function HeroSection({ searchQuery, onSearchChange }: { searchQuery: string; onSearchChange: (v: string) => void }) {
+function PullToRefreshIndicator({ pullDistance, refreshing }: { pullDistance: number; refreshing: boolean }) {
+  if (pullDistance === 0 && !refreshing) return null;
+  const opacity = Math.min(pullDistance / 80, 1);
+  const rotate = refreshing ? undefined : pullDistance * 3;
+
+  return (
+    <div
+      className="flex items-center justify-center py-2 overflow-hidden transition-all"
+      style={{ height: pullDistance > 0 || refreshing ? `${Math.max(pullDistance, refreshing ? 48 : 0)}px` : 0 }}
+    >
+      <div style={{ opacity }} className="text-muted-foreground">
+        {refreshing ? (
+          <Loader2 className="h-5 w-5 animate-spin" />
+        ) : (
+          <RefreshCw className="h-5 w-5" style={{ transform: `rotate(${rotate}deg)` }} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StickySearchBar({ searchQuery, onSearchChange, visible }: { searchQuery: string; onSearchChange: (v: string) => void; visible: boolean }) {
+  return (
+    <AnimatePresence>
+      {visible && (
+        <motion.div
+          initial={{ y: -60, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: -60, opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-md border-b shadow-sm"
+        >
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex items-center gap-3">
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <ShieldCheck className="h-5 w-5 text-primary" />
+              <span className="font-bold text-sm hidden sm:inline">Tarmac</span>
+            </div>
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                data-testid="input-search-sticky"
+                type="search"
+                placeholder="Search airports..."
+                value={searchQuery}
+                onChange={(e) => onSearchChange(e.target.value)}
+                className="pl-9 h-9 text-sm"
+              />
+            </div>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+function HeroSection({ searchQuery, onSearchChange, searchRef }: { searchQuery: string; onSearchChange: (v: string) => void; searchRef: React.Ref<HTMLDivElement> }) {
+  const { theme, toggleTheme } = useTheme();
+
   return (
     <div className="relative overflow-hidden bg-gradient-to-br from-slate-500 via-primary to-slate-600 dark:from-slate-700 dark:via-primary dark:to-slate-800">
       <div className="absolute inset-0">
@@ -45,23 +105,33 @@ function HeroSection({ searchQuery, onSearchChange }: { searchQuery: string; onS
       </div>
       <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '32px 32px' }} />
 
-      <div className="relative max-w-4xl mx-auto px-4 pt-14 pb-20 sm:px-6 lg:px-8 text-center">
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={toggleTheme}
+        className="absolute top-4 right-4 z-10 text-white/80 hover:text-white hover:bg-white/15 h-10 w-10"
+        data-testid="button-theme-toggle"
+      >
+        {theme === "light" ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
+      </Button>
+
+      <div className="relative max-w-4xl mx-auto px-4 pt-10 pb-16 sm:pt-14 sm:pb-20 sm:px-6 lg:px-8 text-center">
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="flex items-center justify-center gap-2.5 mb-5"
+          className="flex items-center justify-center gap-2.5 mb-4 sm:mb-5"
         >
-          <div className="p-2.5 rounded-md bg-white/15 backdrop-blur-sm">
-            <ShieldCheck className="h-7 w-7 text-white" />
+          <div className="p-2 sm:p-2.5 rounded-md bg-white/15 backdrop-blur-sm">
+            <ShieldCheck className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Tarmac</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Tarmac</h1>
         </motion.div>
         <motion.p
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.1 }}
-          className="text-xl text-white/95 mb-2 font-semibold"
+          className="text-lg sm:text-xl text-white/95 mb-1.5 sm:mb-2 font-semibold"
         >
           Real-time airport security wait times
         </motion.p>
@@ -69,11 +139,12 @@ function HeroSection({ searchQuery, onSearchChange }: { searchQuery: string; onS
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.2 }}
-          className="text-sm text-white/70 mb-10 max-w-md mx-auto leading-relaxed"
+          className="text-xs sm:text-sm text-white/70 mb-8 sm:mb-10 max-w-md mx-auto leading-relaxed"
         >
           Crowdsourced by travelers like you. Report wait times and help others plan ahead.
         </motion.p>
         <motion.div
+          ref={searchRef}
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.3 }}
@@ -86,7 +157,7 @@ function HeroSection({ searchQuery, onSearchChange }: { searchQuery: string; onS
             placeholder="Search by airport name or code (e.g., LAX, JFK)"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="pl-12 text-base bg-background border-0 shadow-xl rounded-md"
+            className="pl-12 h-12 sm:h-11 text-base bg-background border-0 shadow-xl rounded-md"
           />
         </motion.div>
       </div>
@@ -171,7 +242,7 @@ function AirportCard({ airport, index }: { airport: AirportWithStats; index: num
       transition={{ duration: 0.3, delay: Math.min(index * 0.04, 0.4) }}
     >
       <Card
-        className="p-3 sm:p-4 cursor-pointer hover-elevate active-elevate-2 transition-all"
+        className="p-3 sm:p-4 cursor-pointer hover-elevate active-elevate-2 transition-all active:scale-[0.98]"
         onClick={() => setLocation(`/airport/${airport.code}`)}
         data-testid={`card-airport-${airport.code}`}
       >
@@ -214,7 +285,7 @@ function AirportCard({ airport, index }: { airport: AirportWithStats; index: num
                 {airport.reportCount} {airport.reportCount === 1 ? "report" : "reports"}
               </p>
             </div>
-            <div className={`sm:hidden text-right`} data-testid={`text-freshness-${airport.code}`}>
+            <div className="sm:hidden text-right" data-testid={`text-freshness-${airport.code}`}>
               <p className="text-[10px] text-muted-foreground">
                 {airport.reportCount} {airport.reportCount === 1 ? "report" : "reports"}
               </p>
@@ -251,11 +322,59 @@ function AirportListSkeleton() {
 
 export default function Home() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [showStickySearch, setShowStickySearch] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [pullDistance, setPullDistance] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const startY = useRef(0);
+  const pulling = useRef(false);
 
   const { data: airports, isLoading } = useQuery<AirportWithStats[]>({
     queryKey: ["/api/airports"],
     refetchInterval: 30000,
   });
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => setShowStickySearch(!entry.isIntersecting),
+      { threshold: 0 }
+    );
+    const el = searchRef.current;
+    if (el) observer.observe(el);
+    return () => { if (el) observer.unobserve(el); };
+  }, []);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await queryClient.invalidateQueries({ queryKey: ["/api/airports"] });
+    await new Promise((r) => setTimeout(r, 500));
+    setRefreshing(false);
+  }, []);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (window.scrollY === 0) {
+      startY.current = e.touches[0].clientY;
+      pulling.current = true;
+    }
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!pulling.current || refreshing) return;
+    const delta = e.touches[0].clientY - startY.current;
+    if (delta > 0) {
+      setPullDistance(Math.min(delta * 0.4, 100));
+    }
+  }, [refreshing]);
+
+  const handleTouchEnd = useCallback(async () => {
+    if (!pulling.current) return;
+    pulling.current = false;
+    if (pullDistance >= 60 && !refreshing) {
+      await handleRefresh();
+    }
+    setPullDistance(0);
+  }, [pullDistance, refreshing, handleRefresh]);
 
   const filtered = airports?.filter((a) => {
     if (!searchQuery) return true;
@@ -278,13 +397,21 @@ export default function Home() {
   });
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <HeroSection searchQuery={searchQuery} onSearchChange={setSearchQuery} />
+    <div
+      ref={containerRef}
+      className="min-h-screen bg-background flex flex-col"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      <StickySearchBar searchQuery={searchQuery} onSearchChange={setSearchQuery} visible={showStickySearch} />
+      <PullToRefreshIndicator pullDistance={pullDistance} refreshing={refreshing} />
+      <HeroSection searchQuery={searchQuery} onSearchChange={setSearchQuery} searchRef={searchRef} />
       <StatsBar airports={airports || []} />
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full flex-1">
-        <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
-          <h2 className="text-xl font-bold">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 w-full flex-1">
+        <div className="flex items-center justify-between mb-4 sm:mb-5 flex-wrap gap-2">
+          <h2 className="text-lg sm:text-xl font-bold">
             {searchQuery ? "Search Results" : "All Airports"}
           </h2>
           {searchQuery && (
@@ -297,7 +424,7 @@ export default function Home() {
         {isLoading ? (
           <AirportListSkeleton />
         ) : sorted && sorted.length > 0 ? (
-          <div className="space-y-2.5">
+          <div className="space-y-2 sm:space-y-2.5">
             {sorted.map((airport, i) => (
               <AirportCard key={airport.id} airport={airport} index={i} />
             ))}
