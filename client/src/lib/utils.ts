@@ -47,3 +47,19 @@ export function formatMinutes(minutes: number | null): string {
   if (minutes === null) return "--";
   return `${Math.round(minutes)} min`;
 }
+
+export function getWaitTimeDot(minutes: number | null): string {
+  if (minutes === null) return "bg-muted-foreground";
+  if (minutes <= 10) return "bg-emerald-500";
+  if (minutes <= 20) return "bg-amber-500";
+  if (minutes <= 35) return "bg-orange-500";
+  return "bg-red-500";
+}
+
+export function getWaitTimeHex(minutes: number | null): string {
+  if (minutes === null) return "#9ca3af";
+  if (minutes <= 10) return "#22c55e";
+  if (minutes <= 20) return "#f59e0b";
+  if (minutes <= 35) return "#f97316";
+  return "#ef4444";
+}
