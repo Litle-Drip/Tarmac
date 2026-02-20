@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { AirportWithStats } from "@shared/schema";
-import { getWaitTimeColor, getWaitTimeBg, getWaitTimeLabel, formatMinutes, timeAgo, getWaitTimeDot, getDataSourceLabel, getDataSourceStyle } from "@/lib/utils";
+import { getWaitTimeColor, getWaitTimeBg, getWaitTimeLabel, formatMinutes, timeAgo, getWaitTimeDot, getDataSourceLabel, getDataSourceStyle, getFreshnessInfo } from "@/lib/utils";
 
 function AnimatedCounter({ value, suffix = "" }: { value: number; suffix?: string }) {
   const [display, setDisplay] = useState(0);
@@ -162,8 +162,7 @@ function DataSourceBadge({ source }: { source: "community" | "estimated" | "blen
 
 function AirportCard({ airport, index }: { airport: AirportWithStats; index: number }) {
   const [, setLocation] = useLocation();
-  const hasData = airport.reportCount > 0;
-  const isRecent = airport.latestReport && (Date.now() - new Date(airport.latestReport).getTime()) < 3600000;
+  const freshness = getFreshnessInfo(airport.latestReport);
 
   return (
     <motion.div
@@ -183,8 +182,8 @@ function AirportCard({ airport, index }: { airport: AirportWithStats; index: num
                 {formatMinutes(airport.avgWaitMinutes).replace(" min", "")}
               </span>
               <span className={`text-[10px] font-medium mt-0.5 ${getWaitTimeColor(airport.avgWaitMinutes)}`}>min</span>
-              {isRecent && (
-                <span className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full ${getWaitTimeDot(airport.avgWaitMinutes)} ring-2 ring-card`} />
+              {freshness.level === "fresh" && (
+                <span className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full ${freshness.dotColor} ring-2 ring-card animate-pulse`} />
               )}
             </div>
             <div className="min-w-0">
@@ -201,12 +200,10 @@ function AirportCard({ airport, index }: { airport: AirportWithStats; index: num
           </div>
           <div className="flex-shrink-0 flex items-center gap-2.5">
             <div className="text-right">
-              {hasData && airport.latestReport && (
-                <div className="flex items-center justify-end gap-1 text-xs text-muted-foreground">
-                  <Clock className="h-3 w-3" />
-                  <span>{timeAgo(airport.latestReport)}</span>
-                </div>
-              )}
+              <div className={`flex items-center justify-end gap-1.5 text-xs font-medium ${freshness.color}`} data-testid={`text-freshness-${airport.code}`}>
+                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${freshness.dotColor}`} />
+                <span>{freshness.label}</span>
+              </div>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {airport.reportCount} {airport.reportCount === 1 ? "report" : "reports"}
               </p>

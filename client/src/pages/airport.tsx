@@ -14,8 +14,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { AirportWithStats, WaitTimeReport } from "@shared/schema";
-import { getWaitTimeColor, getWaitTimeBg, getWaitTimeLabel, formatMinutes, timeAgo, getWaitTimeHex, getWaitTimeDot, getDataSourceLabel, getDataSourceStyle } from "@/lib/utils";
+import type { AirportWithStats, WaitTimeReport, CheckpointStats } from "@shared/schema";
+import { getWaitTimeColor, getWaitTimeBg, getWaitTimeLabel, formatMinutes, timeAgo, getWaitTimeHex, getWaitTimeDot, getDataSourceLabel, getDataSourceStyle, getFreshnessInfo } from "@/lib/utils";
 
 function AnimatedGauge({ minutes, dataSource }: { minutes: number | null; dataSource: "community" | "estimated" | "blended" }) {
   const pct = minutes !== null ? Math.min((minutes / 60) * 100, 100) : 0;
@@ -90,6 +90,7 @@ function ReportForm({ airportId, airportCode, onSuccess }: { airportId: string; 
       queryClient.invalidateQueries({ queryKey: ["/api/airports"] });
       queryClient.invalidateQueries({ queryKey: ["/api/airports", airportCode] });
       queryClient.invalidateQueries({ queryKey: ["/api/reports", airportCode] });
+      queryClient.invalidateQueries({ queryKey: ["/api/checkpoints", airportCode] });
       toast({ title: "Report submitted!", description: "Thanks for helping fellow travelers." });
       onSuccess();
     },
@@ -281,6 +282,48 @@ function ReportCard({ report, index }: { report: WaitTimeReport; index: number }
   );
 }
 
+function CheckpointCard({ checkpoint, index }: { checkpoint: CheckpointStats; index: number }) {
+  const freshness = getFreshnessInfo(checkpoint.latestReport);
+  const barWidth = Math.min((checkpoint.avgWaitMinutes / 60) * 100, 100);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -10 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.3, delay: Math.min(index * 0.08, 0.3) }}
+      className="flex items-center gap-3"
+    >
+      <div className={`flex-shrink-0 flex flex-col items-center justify-center w-11 h-11 rounded-md ${getWaitTimeBg(checkpoint.avgWaitMinutes)}`}>
+        <span className={`text-sm font-bold ${getWaitTimeColor(checkpoint.avgWaitMinutes)}`}>
+          {checkpoint.avgWaitMinutes}
+        </span>
+        <span className={`text-[8px] font-medium ${getWaitTimeColor(checkpoint.avgWaitMinutes)}`}>min</span>
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-sm font-medium" data-testid={`text-checkpoint-name-${index}`}>{checkpoint.checkpoint}</span>
+            <span className="text-xs text-muted-foreground">({checkpoint.reportCount})</span>
+          </div>
+          <div className={`flex items-center gap-1 text-[10px] font-medium ${freshness.color}`}>
+            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${freshness.dotColor}`} />
+            <span>{freshness.label}</span>
+          </div>
+        </div>
+        <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
+          <motion.div
+            className="h-full rounded-full"
+            style={{ backgroundColor: getWaitTimeHex(checkpoint.avgWaitMinutes) }}
+            initial={{ width: 0 }}
+            animate={{ width: `${barWidth}%` }}
+            transition={{ duration: 0.6, ease: "easeOut", delay: 0.2 }}
+          />
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 function AirportDetailSkeleton() {
   return (
     <div className="min-h-screen bg-background">
@@ -352,6 +395,12 @@ export default function AirportDetail() {
     enabled: !!airport,
   });
 
+  const { data: checkpointStats } = useQuery<CheckpointStats[]>({
+    queryKey: ["/api/checkpoints", code],
+    refetchInterval: 30000,
+    enabled: !!airport,
+  });
+
   if (airportLoading) {
     return <AirportDetailSkeleton />;
   }
@@ -412,6 +461,16 @@ export default function AirportDetail() {
                 </Badge>
               </div>
               <p className="text-muted-foreground text-sm" data-testid="text-airport-name">{airport.name}</p>
+              {(() => {
+                const freshness = getFreshnessInfo(airport.latestReport);
+                return (
+                  <div className={`flex items-center gap-1.5 mt-2 text-xs font-medium ${freshness.color}`} data-testid="text-detail-freshness">
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${freshness.dotColor} ${freshness.level === "fresh" ? "animate-pulse" : ""}`} />
+                    <Clock className="h-3 w-3" />
+                    <span>{airport.reportCount > 0 ? `Last report: ${freshness.label}` : "No community reports yet"}</span>
+                  </div>
+                );
+              })()}
             </div>
 
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -458,6 +517,26 @@ export default function AirportDetail() {
             </div>
           </Card>
         </motion.div>
+
+        {checkpointStats && checkpointStats.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.3 }}
+          >
+            <Card className="p-5" data-testid="card-checkpoint-breakdown">
+              <div className="flex items-center gap-2 mb-4">
+                <Shield className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">By Checkpoint</h3>
+              </div>
+              <div className="space-y-4">
+                {checkpointStats.map((cp, i) => (
+                  <CheckpointCard key={cp.checkpoint} checkpoint={cp} index={i} />
+                ))}
+              </div>
+            </Card>
+          </motion.div>
+        )}
 
         <motion.div
           initial={{ opacity: 0, y: 15 }}

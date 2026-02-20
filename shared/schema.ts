@@ -41,3 +41,10 @@ export type AirportWithStats = Airport & {
   latestReport: string | null;
   dataSource: "community" | "estimated" | "blended";
 };
+
+export type CheckpointStats = {
+  checkpoint: string;
+  avgWaitMinutes: number;
+  reportCount: number;
+  latestReport: string;
+};

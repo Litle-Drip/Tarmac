@@ -23,6 +23,7 @@ A crowdsourced airport security wait time app (like Waze for TSA lines). Users c
 - `GET /api/airports` - List all airports with aggregated wait time stats
 - `GET /api/airports/:code` - Get single airport by code
 - `GET /api/reports/:code` - Get recent reports for an airport
+- `GET /api/checkpoints/:code` - Get per-checkpoint average wait times (last 24h)
 - `POST /api/reports` - Submit a new wait time report
 
 ## Data Model

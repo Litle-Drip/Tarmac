@@ -1,6 +1,6 @@
 import { eq, desc, sql, and, gte } from "drizzle-orm";
 import { db } from "./db";
-import { airports, waitTimeReports, type InsertAirport, type Airport, type InsertWaitTimeReport, type WaitTimeReport, type AirportWithStats } from "@shared/schema";
+import { airports, waitTimeReports, type InsertAirport, type Airport, type InsertWaitTimeReport, type WaitTimeReport, type AirportWithStats, type CheckpointStats } from "@shared/schema";
 import { estimateWaitTime } from "./estimator";
 
 const MIN_COMMUNITY_REPORTS = 3;
@@ -10,6 +10,7 @@ export interface IStorage {
   getAirportByCode(code: string): Promise<AirportWithStats | undefined>;
   createAirport(airport: InsertAirport): Promise<Airport>;
   getReportsByAirportCode(code: string): Promise<WaitTimeReport[]>;
+  getCheckpointStats(code: string): Promise<CheckpointStats[]>;
   createReport(report: InsertWaitTimeReport): Promise<WaitTimeReport>;
   getAirportCount(): Promise<number>;
 }
@@ -138,6 +139,38 @@ export class DatabaseStorage implements IStorage {
       .where(eq(waitTimeReports.airportId, airport[0].id))
       .orderBy(desc(waitTimeReports.reportedAt))
       .limit(50);
+  }
+
+  async getCheckpointStats(code: string): Promise<CheckpointStats[]> {
+    const airport = await db.select().from(airports).where(eq(airports.code, code.toUpperCase())).limit(1);
+    if (airport.length === 0) return [];
+
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    const result = await db
+      .select({
+        checkpoint: waitTimeReports.checkpoint,
+        avgWaitMinutes: sql<number>`round(avg(${waitTimeReports.waitMinutes}))::int`.as("avg_wait"),
+        reportCount: sql<number>`count(*)::int`.as("report_count"),
+        latestReport: sql<string>`max(${waitTimeReports.reportedAt})::text`.as("latest_report"),
+      })
+      .from(waitTimeReports)
+      .where(
+        and(
+          eq(waitTimeReports.airportId, airport[0].id),
+          gte(waitTimeReports.reportedAt, twentyFourHoursAgo),
+          sql`${waitTimeReports.checkpoint} IS NOT NULL AND ${waitTimeReports.checkpoint} != ''`
+        )
+      )
+      .groupBy(waitTimeReports.checkpoint)
+      .orderBy(sql`avg(${waitTimeReports.waitMinutes}) desc`);
+
+    return result.map((r) => ({
+      checkpoint: r.checkpoint!,
+      avgWaitMinutes: Number(r.avgWaitMinutes),
+      reportCount: Number(r.reportCount),
+      latestReport: r.latestReport,
+    }));
   }
 
   async createReport(report: InsertWaitTimeReport): Promise<WaitTimeReport> {

@@ -64,6 +64,17 @@ export function getWaitTimeHex(minutes: number | null): string {
   return "#ef4444";
 }
 
+export function getFreshnessInfo(dateString: string | null): { label: string; color: string; dotColor: string; level: "fresh" | "recent" | "aging" | "stale" | "none" } {
+  if (!dateString) return { label: "No reports", color: "text-muted-foreground", dotColor: "bg-muted-foreground/40", level: "none" };
+  const diffMs = Date.now() - new Date(dateString).getTime();
+  const diffMinutes = Math.floor(diffMs / 60000);
+
+  if (diffMinutes < 30) return { label: timeAgo(dateString), color: "text-emerald-600 dark:text-emerald-400", dotColor: "bg-emerald-500", level: "fresh" };
+  if (diffMinutes < 120) return { label: timeAgo(dateString), color: "text-emerald-600/80 dark:text-emerald-400/80", dotColor: "bg-emerald-400", level: "recent" };
+  if (diffMinutes < 360) return { label: timeAgo(dateString), color: "text-amber-600 dark:text-amber-400", dotColor: "bg-amber-500", level: "aging" };
+  return { label: timeAgo(dateString), color: "text-muted-foreground", dotColor: "bg-muted-foreground/50", level: "stale" };
+}
+
 export function getDataSourceLabel(source: "community" | "estimated" | "blended"): string {
   switch (source) {
     case "community": return "Community";

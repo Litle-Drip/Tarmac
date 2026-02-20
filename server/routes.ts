@@ -41,6 +41,16 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/checkpoints/:code", async (req, res) => {
+    try {
+      const stats = await storage.getCheckpointStats(req.params.code);
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching checkpoint stats:", error);
+      res.status(500).json({ message: "Failed to fetch checkpoint stats" });
+    }
+  });
+
   app.post("/api/reports", async (req, res) => {
     try {
       const parsed = insertWaitTimeReportSchema.safeParse(req.body);
