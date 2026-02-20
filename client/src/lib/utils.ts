@@ -4,3 +4,46 @@ import { twMerge } from "tailwind-merge"
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
+
+export function getWaitTimeColor(minutes: number | null): string {
+  if (minutes === null) return "text-muted-foreground";
+  if (minutes <= 10) return "text-emerald-600 dark:text-emerald-400";
+  if (minutes <= 20) return "text-amber-600 dark:text-amber-400";
+  if (minutes <= 35) return "text-orange-600 dark:text-orange-400";
+  return "text-red-600 dark:text-red-400";
+}
+
+export function getWaitTimeBg(minutes: number | null): string {
+  if (minutes === null) return "bg-muted";
+  if (minutes <= 10) return "bg-emerald-100 dark:bg-emerald-900/30";
+  if (minutes <= 20) return "bg-amber-100 dark:bg-amber-900/30";
+  if (minutes <= 35) return "bg-orange-100 dark:bg-orange-900/30";
+  return "bg-red-100 dark:bg-red-900/30";
+}
+
+export function getWaitTimeLabel(minutes: number | null): string {
+  if (minutes === null) return "No data";
+  if (minutes <= 10) return "Short";
+  if (minutes <= 20) return "Moderate";
+  if (minutes <= 35) return "Long";
+  return "Very Long";
+}
+
+export function timeAgo(dateString: string): string {
+  const now = new Date();
+  const date = new Date(dateString);
+  const diffMs = now.getTime() - date.getTime();
+  const diffMinutes = Math.floor(diffMs / 60000);
+
+  if (diffMinutes < 1) return "Just now";
+  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays}d ago`;
+}
+
+export function formatMinutes(minutes: number | null): string {
+  if (minutes === null) return "--";
+  return `${Math.round(minutes)} min`;
+}
