@@ -109,37 +109,37 @@ function StatsBar({ airports }: { airports: AirportWithStats[] }) {
       transition={{ duration: 0.4, delay: 0.4 }}
       className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 -mt-7 relative z-10"
     >
-      <Card className="p-5">
-        <div className="grid grid-cols-3 gap-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-md bg-slate-100 dark:bg-slate-800/50">
+      <Card className="p-4 sm:p-5">
+        <div className="grid grid-cols-3 gap-2 sm:gap-4">
+          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-1.5 sm:gap-3 text-center sm:text-left">
+            <div className="p-2 sm:p-2.5 rounded-md bg-slate-100 dark:bg-slate-800/50">
               <Activity className="h-4 w-4 text-primary" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground font-medium">Reports Today</p>
-              <p className="text-xl font-bold" data-testid="text-total-reports" role="status">
+              <p className="text-[10px] sm:text-xs text-muted-foreground font-medium">Reports</p>
+              <p className="text-lg sm:text-xl font-bold" data-testid="text-total-reports" role="status">
                 <AnimatedCounter value={totalReports} />
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-md bg-slate-100 dark:bg-slate-800/50">
+          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-1.5 sm:gap-3 text-center sm:text-left">
+            <div className="p-2 sm:p-2.5 rounded-md bg-slate-100 dark:bg-slate-800/50">
               <MapPin className="h-4 w-4 text-primary" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground font-medium">Active Airports</p>
-              <p className="text-xl font-bold" data-testid="text-active-airports">
+              <p className="text-[10px] sm:text-xs text-muted-foreground font-medium">Active</p>
+              <p className="text-lg sm:text-xl font-bold" data-testid="text-active-airports">
                 <AnimatedCounter value={activeAirports} />
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-md bg-slate-100 dark:bg-slate-800/50">
+          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-1.5 sm:gap-3 text-center sm:text-left">
+            <div className="p-2 sm:p-2.5 rounded-md bg-slate-100 dark:bg-slate-800/50">
               <TrendingUp className="h-4 w-4 text-primary" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground font-medium">Avg Wait</p>
-              <p className={`text-xl font-bold ${getWaitTimeColor(overallAvg)}`} data-testid="text-avg-wait">
+              <p className="text-[10px] sm:text-xs text-muted-foreground font-medium">Avg Wait</p>
+              <p className={`text-lg sm:text-xl font-bold ${getWaitTimeColor(overallAvg)}`} data-testid="text-avg-wait">
                 {overallAvg !== null ? <><AnimatedCounter value={overallAvg} /> min</> : "--"}
               </p>
             </div>
@@ -171,40 +171,51 @@ function AirportCard({ airport, index }: { airport: AirportWithStats; index: num
       transition={{ duration: 0.3, delay: Math.min(index * 0.04, 0.4) }}
     >
       <Card
-        className="p-4 cursor-pointer hover-elevate active-elevate-2 transition-all"
+        className="p-3 sm:p-4 cursor-pointer hover-elevate active-elevate-2 transition-all"
         onClick={() => setLocation(`/airport/${airport.code}`)}
         data-testid={`card-airport-${airport.code}`}
       >
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3.5 min-w-0 flex-1">
-            <div className={`relative flex-shrink-0 flex flex-col items-center justify-center w-14 h-14 rounded-md ${getWaitTimeBg(airport.avgWaitMinutes)}`}>
-              <span className={`text-xl font-bold leading-none ${getWaitTimeColor(airport.avgWaitMinutes)}`}>
+        <div className="flex items-center justify-between gap-2 sm:gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0 flex-1">
+            <div className={`relative flex-shrink-0 flex flex-col items-center justify-center w-12 h-12 sm:w-14 sm:h-14 rounded-md ${getWaitTimeBg(airport.avgWaitMinutes)}`}>
+              <span className={`text-lg sm:text-xl font-bold leading-none ${getWaitTimeColor(airport.avgWaitMinutes)}`}>
                 {formatMinutes(airport.avgWaitMinutes).replace(" min", "")}
               </span>
-              <span className={`text-[10px] font-medium mt-0.5 ${getWaitTimeColor(airport.avgWaitMinutes)}`}>min</span>
+              <span className={`text-[9px] sm:text-[10px] font-medium mt-0.5 ${getWaitTimeColor(airport.avgWaitMinutes)}`}>min</span>
               {freshness.level === "fresh" && (
                 <span className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full ${freshness.dotColor} ring-2 ring-card animate-pulse`} />
               )}
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-bold text-base">{airport.code}</h3>
-                <Badge variant="secondary" className="text-[10px] font-semibold uppercase tracking-wider">
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                <h3 className="font-bold text-sm sm:text-base">{airport.code}</h3>
+                <Badge variant="secondary" className="text-[9px] sm:text-[10px] font-semibold uppercase tracking-wider">
                   {getWaitTimeLabel(airport.avgWaitMinutes)}
                 </Badge>
-                <DataSourceBadge source={airport.dataSource} />
+                <span className="hidden sm:inline-flex"><DataSourceBadge source={airport.dataSource} /></span>
               </div>
-              <p className="text-sm text-muted-foreground truncate mt-0.5">{airport.name}</p>
-              <p className="text-xs text-muted-foreground">{airport.city}, {airport.state}</p>
+              <p className="text-xs sm:text-sm text-muted-foreground truncate mt-0.5">{airport.name}</p>
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                <p className="text-[11px] sm:text-xs text-muted-foreground">{airport.city}, {airport.state}</p>
+                <div className={`flex items-center gap-1 text-[10px] sm:text-xs font-medium sm:hidden ${freshness.color}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${freshness.dotColor}`} />
+                  <span>{freshness.label}</span>
+                </div>
+              </div>
             </div>
           </div>
-          <div className="flex-shrink-0 flex items-center gap-2.5">
-            <div className="text-right">
+          <div className="flex-shrink-0 flex items-center gap-1.5 sm:gap-2.5">
+            <div className="text-right hidden sm:block">
               <div className={`flex items-center justify-end gap-1.5 text-xs font-medium ${freshness.color}`} data-testid={`text-freshness-${airport.code}`}>
                 <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${freshness.dotColor}`} />
                 <span>{freshness.label}</span>
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
+                {airport.reportCount} {airport.reportCount === 1 ? "report" : "reports"}
+              </p>
+            </div>
+            <div className={`sm:hidden text-right`} data-testid={`text-freshness-${airport.code}`}>
+              <p className="text-[10px] text-muted-foreground">
                 {airport.reportCount} {airport.reportCount === 1 ? "report" : "reports"}
               </p>
             </div>
