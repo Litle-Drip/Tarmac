@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@700;800&amp;display=swap');
+    </style>
+  </defs>
+
+  <!-- G-Wagon steel blue -->
+  <rect width="400" height="400" rx="80" fill="#6B93A8"/>
+
+  <g transform="translate(200, 152)">
+
+    <!-- FUSELAGE — outer pill shape -->
+    <path d="
+      M0,-76
+      C12,-76 18,-64 18,-52
+      L18,62
+      C18,74 10,82 0,82
+      C-10,82 -18,74 -18,62
+      L-18,-52
+      C-18,-64 -12,-76 0,-76
+      Z
+    " fill="white"/>
+
+    <!-- FUSELAGE — inner detail (same bg color) -->
+    <path d="
+      M0,-62
+      C7,-62 11,-54 11,-44
+      L11,56
+      C11,66 6,72 0,72
+      C-6,72 -11,66 -11,56
+      L-11,-44
+      C-11,-54 -7,-62 0,-62
+      Z
+    " fill="#6B93A8"/>
+
+    <!-- CENTER spine -->
+    <rect x="-1.5" y="-56" width="3" height="122" rx="1.5" fill="white"/>
+
+    <!-- WINGS — straight horizontal bar, both sides -->
+    <!-- Left wing outer -->
+    <path d="
+      M-18,8 L-18,26 L-104,26
+      C-112,26 -116,22 -116,17
+      C-116,12 -112,8 -104,8 Z
+    " fill="white"/>
+    <!-- Left wing inner detail -->
+    <path d="
+      M-18,13 L-18,21 L-104,21
+      C-108,21 -110,19.5 -110,17
+      C-110,14.5 -108,13 -104,13 Z
+    " fill="#6B93A8"/>
+
+    <!-- Right wing outer -->
+    <path d="
+      M18,8 L18,26 L104,26
+      C112,26 116,22 116,17
+      C116,12 112,8 104,8 Z
+    " fill="white"/>
+    <!-- Right wing inner detail -->
+    <path d="
+      M18,13 L18,21 L104,21
+      C108,21 110,19.5 110,17
+      C110,14.5 108,13 104,13 Z
+    " fill="#6B93A8"/>
+
+    <!-- LEFT ENGINE — teardrop pod -->
+    <ellipse cx="-70" cy="17" rx="10" ry="22" fill="white"/>
+    <ellipse cx="-70" cy="17" rx="6" ry="16" fill="#6B93A8"/>
+    <!-- Left propeller — 2 blades (diagonal cross) -->
+    <path d="M-70,-5 C-67,-10 -61,-18 -59,-22 C-63,-18 -69,-12 -70,-5Z" fill="white"/>
+    <path d="M-70,-5 C-73,-10 -79,-18 -81,-22 C-77,-18 -71,-12 -70,-5Z" fill="white"/>
+    <path d="M-70,-5 C-64,-8 -56,-14 -54,-18 C-60,-13 -68,-8 -70,-5Z" fill="white"/>
+    <path d="M-70,-5 C-76,-8 -84,-14 -86,-18 C-80,-13 -72,-8 -70,-5Z" fill="white"/>
+
+    <!-- RIGHT ENGINE — teardrop pod -->
+    <ellipse cx="70" cy="17" rx="10" ry="22" fill="white"/>
+    <ellipse cx="70" cy="17" rx="6" ry="16" fill="#6B93A8"/>
+    <!-- Right propeller — 2 blades -->
+    <path d="M70,-5 C73,-10 79,-18 81,-22 C77,-18 71,-12 70,-5Z" fill="white"/>
+    <path d="M70,-5 C67,-10 61,-18 59,-22 C63,-18 69,-12 70,-5Z" fill="white"/>
+    <path d="M70,-5 C76,-8 84,-14 86,-18 C80,-13 72,-8 70,-5Z" fill="white"/>
+    <path d="M70,-5 C64,-8 56,-14 54,-18 C60,-13 68,-8 70,-5Z" fill="white"/>
+
+    <!-- TAIL STABILIZERS -->
+    <!-- Left tail -->
+    <path d="
+      M-18,56 L-18,70 L-52,70
+      C-58,70 -60,67 -60,63
+      C-60,59 -58,56 -52,56 Z
+    " fill="white"/>
+    <path d="
+      M-18,59 L-18,67 L-52,67
+      C-56,67 -57,65.5 -57,63
+      C-57,60.5 -56,59 -52,59 Z
+    " fill="#6B93A8"/>
+
+    <!-- Right tail -->
+    <path d="
+      M18,56 L18,70 L52,70
+      C58,70 60,67 60,63
+      C60,59 58,56 52,56 Z
+    " fill="white"/>
+    <path d="
+      M18,59 L18,67 L52,67
+      C56,67 57,65.5 57,63
+      C57,60.5 56,59 52,59 Z
+    " fill="#6B93A8"/>
+
+  </g>
+
+  <!-- Wordmark -->
+  <text
+    x="200" y="314"
+    text-anchor="middle"
+    font-family="'Nunito', sans-serif"
+    font-weight="800"
+    font-size="52"
+    letter-spacing="6"
+    fill="#FFFFFF">TARMAC</text>
+
+  <!-- Subtitle -->
+  <text
+    x="200" y="346"
+    text-anchor="middle"
+    font-family="'Nunito', sans-serif"
+    font-weight="700"
+    font-size="14"
+    letter-spacing="3"
+    fill="rgba(255,255,255,0.85)">SECURITY WAIT TIMES</text>
+
+</svg>
