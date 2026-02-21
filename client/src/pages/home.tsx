@@ -105,16 +105,6 @@ function HeroSection({ searchQuery, onSearchChange, searchRef }: { searchQuery: 
       </div>
       <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '32px 32px' }} />
 
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={toggleTheme}
-        className="absolute top-4 right-4 z-10 text-white/80 hover:text-white hover:bg-white/15 h-10 w-10"
-        data-testid="button-theme-toggle"
-      >
-        {theme === "light" ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
-      </Button>
-
       <div className="relative max-w-4xl mx-auto px-4 pt-10 pb-16 sm:pt-14 sm:pb-20 sm:px-6 lg:px-8 text-center">
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -126,6 +116,15 @@ function HeroSection({ searchQuery, onSearchChange, searchRef }: { searchQuery: 
             <ShieldCheck className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Tarmac</h1>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleTheme}
+            className="text-white/80 hover:text-white hover:bg-white/15 h-9 w-9 rounded-md"
+            data-testid="button-theme-toggle"
+          >
+            {theme === "light" ? <Moon className="h-4.5 w-4.5" /> : <Sun className="h-4.5 w-4.5" />}
+          </Button>
         </motion.div>
         <motion.p
           initial={{ opacity: 0, y: 10 }}
@@ -498,13 +497,16 @@ export default function Home() {
       </div>
 
       <footer className="border-t py-6 mt-auto" data-testid="footer">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-muted-foreground/50" />
-            <span className="text-xs text-muted-foreground" data-testid="text-footer-brand">Tarmac</span>
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-2">
+          <div className="flex items-center justify-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-medium text-muted-foreground" data-testid="text-footer-brand">Tarmac</span>
           </div>
-          <p className="text-xs text-muted-foreground text-right" data-testid="text-footer-disclaimer">
-            Experimental software by Edison Labs LLC. Wait times are crowdsourced and may not reflect actual conditions.
+          <p className="text-xs text-muted-foreground/80" data-testid="text-footer-disclaimer">
+            Experimental software by Edison Labs LLC
+          </p>
+          <p className="text-[11px] text-muted-foreground/60">
+            Wait times are crowdsourced and may not reflect actual conditions.
           </p>
         </div>
       </footer>
