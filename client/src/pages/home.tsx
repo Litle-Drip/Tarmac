@@ -320,6 +320,34 @@ function AirportListSkeleton() {
   );
 }
 
+const AIRPORT_COORDS: Record<string, { lat: number; lng: number }> = {
+  ATL: { lat: 33.6407, lng: -84.4277 }, AUS: { lat: 30.1975, lng: -97.6664 },
+  BOS: { lat: 42.3656, lng: -71.0096 }, BWI: { lat: 39.1754, lng: -76.6684 },
+  CLT: { lat: 35.2140, lng: -80.9431 }, DCA: { lat: 38.8512, lng: -77.0402 },
+  DEN: { lat: 39.8561, lng: -104.6737 }, DFW: { lat: 32.8998, lng: -97.0403 },
+  DTW: { lat: 42.2124, lng: -83.3534 }, EWR: { lat: 40.6895, lng: -74.1745 },
+  FLL: { lat: 26.0742, lng: -80.1506 }, HNL: { lat: 21.3187, lng: -157.9225 },
+  IAD: { lat: 38.9531, lng: -77.4565 }, IAH: { lat: 29.9902, lng: -95.3368 },
+  JFK: { lat: 40.6413, lng: -73.7781 }, LAS: { lat: 36.0840, lng: -115.1537 },
+  LAX: { lat: 33.9416, lng: -118.4085 }, LGA: { lat: 40.7769, lng: -73.8740 },
+  MCO: { lat: 28.4312, lng: -81.3081 }, MIA: { lat: 25.7959, lng: -80.2870 },
+  MSP: { lat: 44.8848, lng: -93.2223 }, ORD: { lat: 41.9742, lng: -87.9073 },
+  PDX: { lat: 45.5898, lng: -122.5951 }, PHL: { lat: 39.8744, lng: -75.2424 },
+  PHX: { lat: 33.4373, lng: -112.0078 }, SAN: { lat: 32.7338, lng: -117.1933 },
+  SEA: { lat: 47.4502, lng: -122.3088 }, SFO: { lat: 37.6213, lng: -122.3790 },
+  SLC: { lat: 40.7899, lng: -111.9791 }, TPA: { lat: 27.9756, lng: -82.5333 },
+};
+
+function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 3959;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 export default function Home() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showStickySearch, setShowStickySearch] = useState(false);
@@ -329,6 +357,16 @@ export default function Home() {
   const [refreshing, setRefreshing] = useState(false);
   const startY = useRef(0);
   const pulling = useRef(false);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => {}
+      );
+    }
+  }, []);
 
   const { data: airports, isLoading } = useQuery<AirportWithStats[]>({
     queryKey: ["/api/airports"],
@@ -388,6 +426,15 @@ export default function Home() {
   });
 
   const sorted = filtered?.sort((a, b) => {
+    if (userLocation) {
+      const coordsA = AIRPORT_COORDS[a.code];
+      const coordsB = AIRPORT_COORDS[b.code];
+      if (coordsA && coordsB) {
+        const distA = haversineDistance(userLocation.lat, userLocation.lng, coordsA.lat, coordsA.lng);
+        const distB = haversineDistance(userLocation.lat, userLocation.lng, coordsB.lat, coordsB.lng);
+        return distA - distB;
+      }
+    }
     if (a.reportCount > 0 && b.reportCount === 0) return -1;
     if (a.reportCount === 0 && b.reportCount > 0) return 1;
     if (a.latestReport && b.latestReport) {
@@ -456,8 +503,8 @@ export default function Home() {
             <ShieldCheck className="h-4 w-4 text-muted-foreground/50" />
             <span className="text-xs text-muted-foreground" data-testid="text-footer-brand">Tarmac</span>
           </div>
-          <p className="text-xs text-muted-foreground" data-testid="text-footer-disclaimer">
-            Wait times are crowdsourced and may not reflect actual conditions.
+          <p className="text-xs text-muted-foreground text-right" data-testid="text-footer-disclaimer">
+            Experimental software by Edison Labs LLC. Wait times are crowdsourced and may not reflect actual conditions.
           </p>
         </div>
       </footer>
