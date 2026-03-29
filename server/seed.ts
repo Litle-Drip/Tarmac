@@ -31,6 +31,8 @@ const US_AIRPORTS = [
   { code: "PDX", name: "Portland International Airport", city: "Portland", state: "OR", terminal_count: 1 },
   { code: "HNL", name: "Daniel K. Inouye International Airport", city: "Honolulu", state: "HI", terminal_count: 2 },
   { code: "AUS", name: "Austin-Bergstrom International Airport", city: "Austin", state: "TX", terminal_count: 1 },
+  { code: "RSW", name: "Southwest Florida International Airport", city: "Fort Myers", state: "FL", terminal_count: 1 },
+  { code: "RHI", name: "Rhinelander-Oneida County Airport", city: "Rhinelander", state: "WI", terminal_count: 1 },
 ];
 
 const SEED_REPORTS = [

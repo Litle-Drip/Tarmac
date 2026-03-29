@@ -335,6 +335,7 @@ const AIRPORT_COORDS: Record<string, { lat: number; lng: number }> = {
   PHX: { lat: 33.4373, lng: -112.0078 }, SAN: { lat: 32.7338, lng: -117.1933 },
   SEA: { lat: 47.4502, lng: -122.3088 }, SFO: { lat: 37.6213, lng: -122.3790 },
   SLC: { lat: 40.7899, lng: -111.9791 }, TPA: { lat: 27.9756, lng: -82.5333 },
+  RSW: { lat: 26.5362, lng: -81.7552 }, RHI: { lat: 45.6312, lng: -89.4675 },
 };
 
 function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
