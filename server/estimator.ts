@@ -1,4 +1,4 @@
-import type { Airport } from "../shared/schema";
+import type { Airport } from "../shared/schema.js";
 
 const BUSY_AIRPORTS = new Set([
   "ATL", "LAX", "ORD", "DFW", "DEN", "JFK", "SFO", "SEA", "LAS", "MCO",

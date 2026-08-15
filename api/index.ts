@@ -1,4 +1,4 @@
-import { createApp, registerErrorHandler } from "../server/app";
+import { createApp, registerErrorHandler } from "../server/app.js";
 
 // Vercel serverless entry point. Express apps are valid Node request
 // handlers, so exporting the app is all Vercel needs. Static assets are
