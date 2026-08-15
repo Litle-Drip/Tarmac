@@ -8,6 +8,10 @@ everyone flying after them gets a better number. Where nobody has reported
 recently, Tarmac shows the typical wait for that airport at that hour and says
 plainly that it's an estimate.
 
+Enter your flight time and it works backwards to a leave-by time — using the
+wait forecast for the hour you'll actually arrive, plus the walk to your gate
+and when boarding starts.
+
 ## How the number is worked out
 
 Accuracy is the whole product, so the model is deliberately simple to describe:
@@ -24,6 +28,19 @@ Accuracy is the whole product, so the model is deliberately simple to describe:
   and how much they agree.
 - **Provenance is always shown.** A number built from reports is labelled
   differently from one built from the baseline model.
+
+## Planning a departure
+
+A single current number can't tell you when to leave: "23 minutes" means
+something very different at the start of a peak than at the end of one. So the
+planner forecasts the wait at your arrival hour rather than reading out the
+wait now, and plans against the *top* of that range — being ten minutes early
+costs nothing, being ten minutes late costs the flight.
+
+It accounts for the walk to the gate (ATL's plane train and DFW's Skylink are
+not rounding errors), bag drop and the airline's cutoff, international boarding
+lead, and a margin you choose. There's also a twelve-hour forecast strip, so
+you can see whether waiting an hour helps.
 
 ## Contributing a report
 
@@ -56,6 +73,7 @@ Set `REPORT_HASH_SALT` to a random 32+ character string in any real deployment.
 |---|---|
 | `shared/schema.ts` | Tables and the API's shared types |
 | `server/wait-model.ts` | The wait-time model — pure, deterministic, tested |
+| `server/forecast.ts` | Forecasting ahead, and the leave-by calculation |
 | `server/baselines.ts` | Typical-wait lookup, per airport and local hour |
 | `server/local-time.ts` | Resolving an instant into an airport's local clock |
 | `server/normalize.ts` | Grouping the terminal and checkpoint names people type |

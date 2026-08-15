@@ -47,6 +47,12 @@ export const airports = pgTable("airports", {
    */
   timezone: text("timezone").notNull().default("America/New_York"),
   tier: varchar("tier", { length: 10 }).notNull().default("small"),
+  /**
+   * Typical minutes from clearing security to standing at the gate, including
+   * trains and trams. ATL's plane train and DFW's Skylink make this the
+   * difference between a plan that works and one that doesn't.
+   */
+  gateTransitMinutes: integer("gate_transit_minutes").notNull().default(12),
 });
 
 export const waitTimeReports = pgTable(
@@ -245,4 +251,58 @@ export type WaitTimeReportWithVotes = Omit<WaitTimeReport, "reportedAt"> & {
   reportedAt: string;
   agreeCount: number;
   disagreeCount: number;
+};
+
+export const RISK_TOLERANCES = ["tight", "comfortable", "early"] as const;
+export type RiskTolerance = (typeof RISK_TOLERANCES)[number];
+
+/** Query parameters for the departure planner. */
+export const planQuerySchema = z.object({
+  /** ISO-8601 scheduled departure. Must carry an offset. */
+  departureAt: z.string().datetime({ offset: true }),
+  line: z.enum(LINE_TYPES).default("standard"),
+  checkedBag: z.coerce.boolean().default(false),
+  international: z.coerce.boolean().default(false),
+  risk: z.enum(RISK_TOLERANCES).default("comfortable"),
+});
+
+export type PlanQuery = z.infer<typeof planQuerySchema>;
+
+export const forecastQuerySchema = z.object({
+  line: z.enum(LINE_TYPES).default("standard"),
+  hours: z.coerce.number().int().min(1).max(24).default(12),
+});
+
+export type WaitForecastPoint = {
+  /** ISO-8601 UTC. */
+  at: string;
+  localHour: number;
+  waitMinutes: number;
+  low: number;
+  high: number;
+  confidence: Confidence;
+};
+
+export type PlanStep = {
+  label: string;
+  minutes: number;
+  detail: string;
+};
+
+export type DeparturePlan = {
+  departureAt: string;
+  arriveAtAirportBy: string;
+  /** Airline bag-drop deadline, when a bag is being checked. */
+  bagDropClosesAt: string | null;
+  totalMinutes: number;
+  securityForecast: WaitForecastPoint;
+  steps: PlanStep[];
+  warnings: string[];
+};
+
+export type AirportForecast = {
+  code: string;
+  lineType: LineType;
+  timezone: string;
+  points: WaitForecastPoint[];
 };

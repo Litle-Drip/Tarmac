@@ -14,6 +14,9 @@ import {
   type CheckpointStats,
   type LineType,
   type LineTypeEstimate,
+  type AirportForecast,
+  type DeparturePlan,
+  type PlanQuery,
 } from "../shared/schema.js";
 import {
   estimateWait,
@@ -21,6 +24,13 @@ import {
   WINDOWS_MINUTES,
   type Observation,
 } from "./wait-model.js";
+import {
+  forecastWait,
+  currentDelta,
+  planDeparture,
+  type WaitForecast,
+} from "./forecast.js";
+import { localClock } from "./local-time.js";
 import { loadBaselineLookup, type BaselineLookup } from "./baselines.js";
 import { normalizeLabel, pickDisplayLabel, cleanRawLabel } from "./normalize.js";
 import { REPORT_COOLDOWN_MINUTES, REPORTS_PER_DEVICE_PER_HOUR } from "./identity.js";
@@ -195,6 +205,17 @@ export interface IStorage {
   ): Promise<void>;
   getKnownLabels(code: string): Promise<{ terminals: string[]; checkpoints: string[] }>;
   getAirportCount(): Promise<number>;
+  getForecast(
+    code: string,
+    lineType: LineType,
+    hours: number,
+    now?: Date,
+  ): Promise<AirportForecast | undefined>;
+  getPlan(
+    code: string,
+    query: PlanQuery,
+    now?: Date,
+  ): Promise<(DeparturePlan & { timezone: string }) | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -607,6 +628,100 @@ export class DatabaseStorage implements IStorage {
       .select({ count: sql<number>`count(*)::int` })
       .from(airports);
     return Number(result[0].count);
+  }
+
+  /**
+   * Build a forecast function for one airport and line.
+   *
+   * The current estimate anchors it: how far today is running from typical is
+   * measured once, then decayed as the horizon grows. Returning a closure lets
+   * the planner probe different arrival times without re-querying.
+   */
+  private async forecaster(
+    airport: Airport,
+    lineType: LineType,
+    now: Date,
+  ): Promise<(target: Date) => WaitForecast> {
+    const [reports, baseline] = await Promise.all([
+      this.recentReports(now, [airport.id]),
+      loadBaselineLookup(),
+    ]);
+
+    const forLine = reports.filter((r) => r.lineType === lineType);
+    const confirmations = await this.confirmationsFor(
+      forLine.map((r) => r.id),
+      now,
+    );
+
+    const baselineNow = baseline(airport, lineType, now);
+    const current = estimateWait(
+      toObservations(forLine, confirmations),
+      baselineNow,
+      now,
+    );
+
+    const delta = currentDelta(current, baselineNow);
+
+    return (target: Date) =>
+      forecastWait(
+        baseline(airport, lineType, target),
+        delta,
+        current.confidence,
+        now,
+        target,
+        localClock(target, airport.timezone).hour,
+      );
+  }
+
+  /** Hourly forecast for the next `hours`, on the hour in the airport's zone. */
+  async getForecast(
+    code: string,
+    lineType: LineType,
+    hours: number,
+    now: Date = new Date(),
+  ): Promise<AirportForecast | undefined> {
+    const airport = await this.findAirport(code);
+    if (!airport) return undefined;
+
+    const forecastAt = await this.forecaster(airport, lineType, now);
+
+    const points: WaitForecast[] = [];
+    for (let offset = 0; offset <= hours; offset++) {
+      points.push(forecastAt(new Date(now.getTime() + offset * 60 * 60_000)));
+    }
+
+    return {
+      code: airport.code,
+      lineType,
+      timezone: airport.timezone,
+      points,
+    };
+  }
+
+  /** Work backwards from a flight to the moment to be at the airport. */
+  async getPlan(
+    code: string,
+    query: PlanQuery,
+    now: Date = new Date(),
+  ): Promise<(DeparturePlan & { timezone: string }) | undefined> {
+    const airport = await this.findAirport(code);
+    if (!airport) return undefined;
+
+    const forecastAt = await this.forecaster(airport, query.line, now);
+
+    const plan = planDeparture({
+      departureAt: new Date(query.departureAt),
+      now,
+      gateTransitMinutes: airport.gateTransitMinutes,
+      forecastAt,
+      options: {
+        checkedBag: query.checkedBag,
+        international: query.international,
+        risk: query.risk,
+      },
+    });
+
+    return { ...plan, timezone: airport.timezone };
   }
 }
 

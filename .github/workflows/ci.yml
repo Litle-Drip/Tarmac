@@ -93,5 +93,16 @@ jobs:
               ) THEN
                 RAISE EXCEPTION 'reported_at must be timestamptz';
               END IF;
+
+              -- The departure planner is wrong without per-airport walk
+              -- times, and a missed backfill would leave every airport on
+              -- the column default rather than failing loudly.
+              IF EXISTS (SELECT 1 FROM airports WHERE gate_transit_minutes IS NULL) THEN
+                RAISE EXCEPTION 'every airport needs a gate transit time';
+              END IF;
+
+              IF (SELECT count(DISTINCT gate_transit_minutes) FROM airports) < 5 THEN
+                RAISE EXCEPTION 'gate transit times look unpopulated';
+              END IF;
             END \$\$;
           "
