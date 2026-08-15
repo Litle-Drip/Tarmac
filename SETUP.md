@@ -129,9 +129,25 @@ minute or two. You don't have to do anything.
 
 ## Common problems
 
+**Always start at `/api/health`.** Add it to the end of your site's address
+(e.g. `tarmac-nu.vercel.app/api/health`). It tells you exactly what's wrong:
+
+| What `/api/health` says | What it means | Fix |
+|---|---|---|
+| `"ok":true` | Everything works | If the site still looks wrong, it's a display issue, not setup |
+| `"database":"unconfigured"` | Vercel doesn't have your `DATABASE_URL` | Add it under **Settings → Environment Variables**, then **redeploy** (see below) |
+| `"database":"no-tables"` | Connected, but Step 2 wasn't run | Paste `migrations/setup.sql` into the Neon SQL Editor and Run |
+| `"database":"unreachable"` | Wrong password, or the string is malformed | Reset the password in Neon, copy the **Pooled** string again, update it in Vercel, redeploy |
+| A Vercel error page (500) | The site is running old code | Redeploy from the latest `main` |
+
+> **Environment variables only apply to new deployments.** Changing
+> `DATABASE_URL` does nothing to a site that's already live. After changing it:
+> **Deployments → the top one → ⋯ menu → Redeploy**.
+
+Other problems:
+
 | What you see | What to do |
 |---|---|
-| Site loads but no airports appear | Check `/api/health`. If that fails, fix `DATABASE_URL` in Vercel and redeploy. |
 | "Too many connections" error | Your Neon string is missing `-pooler`. Copy the **Pooled connection** one and update it in Vercel. |
 | Domain shows a redirect loop | A Cloudflare record is still orange-clouded. Set both to **DNS only**. |
 | Deploy fails on Vercel | Open the failed deployment, read the last red lines of the log, and send them to me. |
