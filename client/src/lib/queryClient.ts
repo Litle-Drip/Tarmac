@@ -1,9 +1,21 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { DEVICE_HEADER, getDeviceId } from "./device";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
-    const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    // The API returns { message } for anything a person should read. Prefer
+    // that over the raw body, which is JSON noise in an alert.
+    let message = res.statusText;
+    const body = await res.text();
+    if (body) {
+      try {
+        const parsed = JSON.parse(body);
+        message = parsed?.message ?? body;
+      } catch {
+        message = body;
+      }
+    }
+    throw new Error(message);
   }
 }
 
@@ -12,9 +24,12 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
+  const headers: Record<string, string> = { [DEVICE_HEADER]: getDeviceId() };
+  if (data) headers["Content-Type"] = "application/json";
+
   const res = await fetch(url, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers,
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
@@ -23,14 +38,43 @@ export async function apiRequest(
   return res;
 }
 
+/**
+ * Query keys are path segments, optionally ending in a params object:
+ *   ["/api/airports"]                        -> /api/airports
+ *   ["/api/airports", "LAX"]                 -> /api/airports/LAX
+ *   ["/api/airports", { line: "clear" }]     -> /api/airports?line=clear
+ */
+function urlFromQueryKey(queryKey: readonly unknown[]): string {
+  const segments: string[] = [];
+  let search = "";
+
+  for (const part of queryKey) {
+    if (part === undefined || part === null) continue;
+    if (typeof part === "object") {
+      const params = new URLSearchParams(
+        Object.entries(part as Record<string, string>).filter(
+          ([, value]) => value !== undefined && value !== null && value !== "",
+        ),
+      );
+      const query = params.toString();
+      if (query) search = `?${query}`;
+      continue;
+    }
+    segments.push(encodeURIComponent(String(part)).replace(/%2F/gi, "/"));
+  }
+
+  return segments.join("/") + search;
+}
+
 type UnauthorizedBehavior = "returnNull" | "throw";
 export const getQueryFn: <T>(options: {
   on401: UnauthorizedBehavior;
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const res = await fetch(queryKey.join("/") as string, {
+    const res = await fetch(urlFromQueryKey(queryKey), {
       credentials: "include",
+      headers: { [DEVICE_HEADER]: getDeviceId() },
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
@@ -46,8 +90,11 @@ export const queryClient = new QueryClient({
     queries: {
       queryFn: getQueryFn({ on401: "throw" }),
       refetchInterval: false,
-      refetchOnWindowFocus: false,
-      staleTime: Infinity,
+      // People check this app immediately before leaving for the airport.
+      // Coming back to the tab should show a current number, not the one from
+      // whenever they last looked.
+      refetchOnWindowFocus: true,
+      staleTime: 15_000,
       retry: false,
     },
     mutations: {
