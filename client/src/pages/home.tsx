@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, Plane, Users, TrendingUp, ChevronRight, MapPin, ShieldCheck,
@@ -657,6 +657,9 @@ export default function Home() {
           <p className="text-[11px] text-muted-foreground/60">
             Wait times are crowdsourced and may not reflect actual conditions.
           </p>
+          <Link href="/privacy" className="text-[11px] text-muted-foreground/80 underline">
+            Privacy
+          </Link>
         </div>
       </footer>
     </div>

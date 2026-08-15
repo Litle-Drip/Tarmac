@@ -1,10 +1,11 @@
-import { eq, desc, sql, and, gte, inArray } from "drizzle-orm";
+import { eq, desc, sql, and, gte, lt, inArray } from "drizzle-orm";
 import { db } from "./db.js";
 import {
   airports,
   waitTimeReports,
   reportConfirmations,
   LINE_TYPES,
+  REPORT_RETENTION_DAYS,
   type InsertAirport,
   type Airport,
   type InsertWaitTimeReport,
@@ -12,6 +13,7 @@ import {
   type WaitTimeReportWithVotes,
   type AirportWithStats,
   type CheckpointStats,
+  type CreateReportResult,
   type LineType,
   type LineTypeEstimate,
   type AirportForecast,
@@ -78,6 +80,7 @@ type RawReport = {
   terminalKey: string | null;
   checkpointKey: string | null;
   reportedAt: Date;
+  observedAt: Date;
 };
 
 type RawConfirmation = {
@@ -117,7 +120,8 @@ function toObservations(
 
     observations.push({
       waitMinutes: report.waitMinutes,
-      at: report.reportedAt,
+      // When they went through, not when they told us.
+      at: report.observedAt,
       trust,
     });
 
@@ -171,9 +175,11 @@ function buildStats(
     byLineType.find((estimate) => estimate.lineType === requestedLine) ??
     byLineType[0];
 
+  // "Last report" means the freshest condition we know about, which is when
+  // somebody was last in the line — not when a form was last submitted.
   const latest = reports.reduce<Date | null>(
     (newest, report) =>
-      newest === null || report.reportedAt > newest ? report.reportedAt : newest,
+      newest === null || report.observedAt > newest ? report.observedAt : newest,
     null,
   );
 
@@ -196,7 +202,10 @@ export interface IStorage {
   createAirport(airport: InsertAirport): Promise<Airport>;
   getReportsByAirportCode(code: string): Promise<WaitTimeReportWithVotes[]>;
   getCheckpointStats(code: string, now?: Date): Promise<CheckpointStats[]>;
-  createReport(report: InsertWaitTimeReport, ipHash: string | null): Promise<WaitTimeReport>;
+  createReport(
+    report: InsertWaitTimeReport,
+    ipHash: string | null,
+  ): Promise<CreateReportResult>;
   confirmReport(
     reportId: string,
     deviceId: string,
@@ -205,6 +214,7 @@ export interface IStorage {
   ): Promise<void>;
   getKnownLabels(code: string): Promise<{ terminals: string[]; checkpoints: string[] }>;
   getAirportCount(): Promise<number>;
+  purgeExpiredReports(now?: Date): Promise<number>;
   getForecast(
     code: string,
     lineType: LineType,
@@ -245,6 +255,7 @@ export class DatabaseStorage implements IStorage {
         terminalKey: waitTimeReports.terminalKey,
         checkpointKey: waitTimeReports.checkpointKey,
         reportedAt: waitTimeReports.reportedAt,
+        observedAt: waitTimeReports.observedAt,
       })
       .from(waitTimeReports)
       .where(and(...conditions));
@@ -381,6 +392,7 @@ export class DatabaseStorage implements IStorage {
       return {
         ...row,
         reportedAt: row.reportedAt.toISOString(),
+        observedAt: row.observedAt.toISOString(),
         agreeCount: counts.agree,
         disagreeCount: counts.disagree,
       };
@@ -507,8 +519,9 @@ export class DatabaseStorage implements IStorage {
   async createReport(
     report: InsertWaitTimeReport,
     ipHash: string | null,
-  ): Promise<WaitTimeReport> {
+  ): Promise<CreateReportResult> {
     const now = new Date();
+    const lineType = report.lineType as LineType;
 
     if (report.deviceId) {
       await this.enforceRateLimit(report.deviceId, report.airportId, now);
@@ -524,18 +537,31 @@ export class DatabaseStorage implements IStorage {
       throw new UnknownAirportError(report.airportId);
     }
 
+    // The traveller tells us how long ago they cleared the checkpoint; we
+    // turn that into an instant here rather than trusting a timestamp from
+    // their device, whose clock we have no reason to believe.
+    const observedAt = new Date(
+      now.getTime() - (report.observedMinutesAgo ?? 0) * 60_000,
+    );
+
     const baseline = await loadBaselineLookup();
-    const expected = baseline(airport[0], report.lineType as LineType, now);
+    // Judge plausibility against the hour they were actually in the line.
+    const expected = baseline(airport[0], lineType, observedAt);
 
     const terminal = cleanRawLabel(report.terminal);
     const checkpoint = cleanRawLabel(report.checkpoint);
+
+    // Retention runs off the back of writes rather than a scheduler: it needs
+    // no extra configuration to keep working, and a deployment that accepts
+    // reports is by definition one that can clean them up.
+    void this.maybePurge(now);
 
     const [created] = await db
       .insert(waitTimeReports)
       .values({
         airportId: report.airportId,
         waitMinutes: report.waitMinutes,
-        lineType: report.lineType,
+        lineType,
         source: report.source ?? "community",
         terminal,
         checkpoint,
@@ -543,13 +569,53 @@ export class DatabaseStorage implements IStorage {
         checkpointKey: normalizeLabel(checkpoint),
         deviceId: report.deviceId ?? null,
         ipHash,
+        reportedAt: now,
+        observedAt,
         // Implausible values are kept, not dropped — a filter that silently
         // deletes data is a filter nobody can debug.
         status: isPlausible(report.waitMinutes, expected) ? "active" : "flagged",
       })
       .returning();
 
-    return created;
+    // Hand back what the airport now reads, so the person who just reported
+    // can see their contribution land instead of being thanked into a void.
+    const updated = await this.getAirportByCode(airport[0].code, lineType, now);
+
+    return {
+      report: {
+        ...created,
+        reportedAt: created.reportedAt.toISOString(),
+        observedAt: created.observedAt.toISOString(),
+        agreeCount: 0,
+        disagreeCount: 0,
+      },
+      wait: updated?.wait ?? {
+        waitMinutes: report.waitMinutes,
+        low: report.waitMinutes,
+        high: report.waitMinutes,
+        confidence: "low",
+        dataSource: "community",
+        sampleCount: 1,
+        newestObservationAt: observedAt.toISOString(),
+      },
+      lineType,
+    };
+  }
+
+  private lastPurgeAt = 0;
+
+  /** At most once an hour per instance, and never blocking the response. */
+  private async maybePurge(now: Date): Promise<void> {
+    const HOUR_MS = 60 * 60 * 1000;
+    if (now.getTime() - this.lastPurgeAt < HOUR_MS) return;
+    this.lastPurgeAt = now.getTime();
+
+    try {
+      await this.purgeExpiredReports(now);
+    } catch (error) {
+      // Retention failing must never stop someone filing a report.
+      console.error("Retention purge failed:", error);
+    }
   }
 
   private async enforceRateLimit(
@@ -621,6 +687,28 @@ export class DatabaseStorage implements IStorage {
         target: [reportConfirmations.deviceId, reportConfirmations.reportId],
         set: { agrees, createdAt: new Date() },
       });
+  }
+
+  /**
+   * Delete reports past the retention window.
+   *
+   * Confirmations cascade with their report, so the device token and IP hash
+   * attached to a report go with it. The privacy page promises this happens;
+   * this is where it happens.
+   */
+  async purgeExpiredReports(now: Date = new Date()): Promise<number> {
+    const cutoff = new Date(
+      now.getTime() - REPORT_RETENTION_DAYS * 24 * 60 * 60 * 1000,
+    );
+    const deleted = await db
+      .delete(waitTimeReports)
+      .where(lt(waitTimeReports.reportedAt, cutoff))
+      .returning({ id: waitTimeReports.id });
+
+    if (deleted.length > 0) {
+      console.log(`Purged ${deleted.length} reports older than ${REPORT_RETENTION_DAYS} days`);
+    }
+    return deleted.length;
   }
 
   async getAirportCount(): Promise<number> {

@@ -21,6 +21,31 @@ An observation is one data point about how long a line was, at a moment:
 A **disagreement** doesn't create an observation. It halves what the report it
 landed on counts for, floored so a single grudge can't erase a report.
 
+### Observation time, not submission time
+
+Reports are filed after the fact. Somebody who waited 30 minutes types it in at
+the gate, not in the queue, so stamping the report "now" claims conditions are
+current when they are half an hour old. That error always points the same way,
+so it cannot average out — it makes every airport look fresher and more certain
+than it is.
+
+So the form asks when they got through, and the client sends an *offset* rather
+than a timestamp (a wrong clock on a phone must not be able to backdate a
+report). The server turns it into `observed_at`, and that is what the model
+weights by and what "last report" means. `reported_at` remains the submission
+time and is what rate limiting and retention use.
+
+### How stubborn the model is
+
+A weighted median is what stops one mistaken or malicious entry moving the
+number — and the same property means one dissenting report doesn't overturn
+three agreeing ones, even when it's the freshest. That's deliberate, and
+`server/observation-time.test.ts` pins the behaviour down.
+
+Two things move a stale number quickly: a second person reporting, or a
+thumbs-down on the reports that have aged badly. That's why the confirmation
+prompt sits directly under the gauge rather than at the bottom of the page.
+
 ### From observations to a number
 
 `server/wait-model.ts` — pure functions, an explicit `now`, no randomness.
@@ -126,6 +151,16 @@ There are no accounts. Instead:
   than dropped, because a filter that silently deletes data can't be debugged.
 - One vote per device per report, enforced by a unique index. You can't confirm
   your own report.
+- **Retention.** Reports are deleted after `REPORT_RETENTION_DAYS` (90), taking
+  their device token and IP hash with them. It runs opportunistically off the
+  back of writes, throttled to once an hour per instance, so it needs no
+  scheduler and no extra configuration to keep working. The privacy page states
+  this figure, so the two must stay in step.
+
+Request logging records method, path, status and duration — deliberately not
+response bodies. Logging bodies put every airport's data in the log on every
+poll, and would have written travellers' flight times there once the planner
+shipped.
 
 ## Data flow
 
@@ -166,7 +201,7 @@ disagree.
 | `GET /api/airports/:code/plan?departureAt=&…` | Leave-by time. `no-store` — depends on `now` |
 | `GET /api/reports/:code` | Last 6 hours, with confirmation tallies |
 | `GET /api/checkpoints/:code` | Grouped by terminal, checkpoint and line |
-| `POST /api/reports` | Requires `X-Tarmac-Device`. 429 on cooldown. |
+| `POST /api/reports` | Requires `X-Tarmac-Device`. 429 on cooldown. Returns the updated estimate. |
 | `POST /api/reports/:id/confirm` | `{ agrees: boolean }` |
 
 Read endpoints set a short `s-maxage` so polling clients hit the CDN rather

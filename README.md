@@ -20,6 +20,9 @@ Accuracy is the whole product, so the model is deliberately simple to describe:
   together. Averaging them produces a number nobody stands in.
 - **Recent reports count for more.** A report's influence halves every 30
   minutes. Anything older than six hours is ignored entirely.
+- **We ask when you got through, not when you're typing.** People report from
+  the gate, so treating submission time as observation time would make every
+  airport look fresher than it is.
 - **The median, not the mean.** One mistaken entry can't drag the number.
 - **Local time, per airport.** The hour of day matters more than anything else,
   and every airport carries its own timezone.
@@ -50,6 +53,9 @@ salted-hashed and never stored raw.
 
 Standing in a line someone else already reported? Tapping 👍 counts as a fresh
 report of that wait — the fastest way to keep a checkpoint current.
+
+Reports are deleted after 90 days. See [Privacy](client/src/pages/privacy.tsx)
+for exactly what is and isn't stored.
 
 ## Running it
 
