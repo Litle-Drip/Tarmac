@@ -1,4 +1,4 @@
-import { seedDatabase } from "./seed";
+import { seedDatabase } from "./seed.js";
 
 // Seeding used to run on every server boot, which is wasteful on a
 // serverless host. Run it once by hand instead: `npm run db:seed`.

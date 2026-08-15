@@ -1,6 +1,6 @@
 import { createServer } from "http";
-import { createApp, registerErrorHandler, log } from "./app";
-import { serveStatic } from "./static";
+import { createApp, registerErrorHandler, log } from "./app.js";
+import { serveStatic } from "./static.js";
 
 (async () => {
   const app = createApp();

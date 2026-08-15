@@ -1,7 +1,7 @@
 import { eq, desc, sql, and, gte } from "drizzle-orm";
-import { db } from "./db";
-import { airports, waitTimeReports, type InsertAirport, type Airport, type InsertWaitTimeReport, type WaitTimeReport, type AirportWithStats, type CheckpointStats } from "../shared/schema";
-import { estimateWaitTime } from "./estimator";
+import { db } from "./db.js";
+import { airports, waitTimeReports, type InsertAirport, type Airport, type InsertWaitTimeReport, type WaitTimeReport, type AirportWithStats, type CheckpointStats } from "../shared/schema.js";
+import { estimateWaitTime } from "./estimator.js";
 
 const MIN_COMMUNITY_REPORTS = 3;
 

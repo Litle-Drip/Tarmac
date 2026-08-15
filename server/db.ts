@@ -1,6 +1,6 @@
 import pg from "pg";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
-import * as schema from "../shared/schema";
+import * as schema from "../shared/schema.js";
 
 // On a serverless host each warm instance keeps its own pool, so keep it
 // small and point DATABASE_URL at a pooled connection string (Neon's
