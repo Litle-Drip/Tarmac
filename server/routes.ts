@@ -1,11 +1,50 @@
 import type { Express } from "express";
+import { sql } from "drizzle-orm";
 import { storage } from "./storage";
+import { db, isDatabaseConfigured } from "./db";
 import { insertWaitTimeReportSchema } from "@shared/schema";
 
 export function registerRoutes(app: Express): void {
 
-  app.get("/api/health", (_req, res) => {
-    res.json({ ok: true });
+  // Reports what is actually wrong rather than failing opaquely, so a broken
+  // deployment can be diagnosed by opening one URL in a browser.
+  app.get("/api/health", async (_req, res) => {
+    if (!isDatabaseConfigured()) {
+      return res.status(503).json({
+        ok: false,
+        database: "unconfigured",
+        message:
+          "DATABASE_URL is not set on this deployment. Add it in your host's environment variables and redeploy.",
+      });
+    }
+
+    try {
+      await db.execute(sql`select 1`);
+    } catch (error) {
+      return res.status(503).json({
+        ok: false,
+        database: "unreachable",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    try {
+      const airportCount = await storage.getAirportCount();
+      return res.json({ ok: true, database: "connected", airportCount });
+    } catch (error) {
+      // 42P01 is Postgres for "relation does not exist".
+      const undefinedTable =
+        typeof error === "object" && error !== null && (error as any).code === "42P01";
+      return res.status(503).json({
+        ok: false,
+        database: undefinedTable ? "no-tables" : "error",
+        message: undefinedTable
+          ? "Connected, but the tables are missing. Run migrations/setup.sql in the Neon SQL Editor."
+          : error instanceof Error
+            ? error.message
+            : String(error),
+      });
+    }
   });
 
   app.get("/api/airports", async (_req, res) => {
