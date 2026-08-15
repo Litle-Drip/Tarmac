@@ -1,12 +1,12 @@
 import type { Express } from "express";
-import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertWaitTimeReportSchema } from "@shared/schema";
 
-export async function registerRoutes(
-  httpServer: Server,
-  app: Express
-): Promise<Server> {
+export function registerRoutes(app: Express): void {
+
+  app.get("/api/health", (_req, res) => {
+    res.json({ ok: true });
+  });
 
   app.get("/api/airports", async (_req, res) => {
     try {
@@ -64,6 +64,4 @@ export async function registerRoutes(
       res.status(500).json({ message: "Failed to create report" });
     }
   });
-
-  return httpServer;
 }
