@@ -41,10 +41,18 @@ You need three free accounts, which you already have: **Neon** (the database),
 5. Click **Run**.
 
 You should see it finish without red error text. To check it worked, click
-**Tables** in the sidebar — you'll see `airports` (32 rows) and
-`wait_time_reports` (24 rows).
+**Tables** in the sidebar — you'll see four tables:
 
-> Running this file a second time is harmless — it will not create duplicates.
+| Table | Rows | What it holds |
+|---|---|---|
+| `airports` | 32 | The airport list, each with its own timezone |
+| `wait_time_reports` | 28 | Traveler reports (starter data) |
+| `report_confirmations` | 0 | One-tap "still about right?" taps |
+| `airport_baselines` | 16,128 | Typical wait per airport, line, day and hour |
+
+> Running this file a second time is harmless — it will not create duplicates,
+> and it will never delete a real report. Re-run it after any update that
+> changes the database.
 
 ---
 
@@ -57,11 +65,19 @@ You should see it finish without red error text. To check it worked, click
    - **Framework Preset**: choose **Other**.
    - Leave Build Command, Output Directory, and Install Command alone. The
      repo already tells Vercel what to do.
-5. Expand **Environment Variables** and add one:
-   - **Key**: `DATABASE_URL`
-   - **Value**: paste the Neon connection string from Step 1
-   - Make sure all three environments are ticked (Production, Preview,
-     Development)
+5. Expand **Environment Variables** and add two. For each one, make sure all
+   three environments are ticked (Production, Preview, Development):
+
+   | Key | Value |
+   |---|---|
+   | `DATABASE_URL` | The Neon connection string from Step 1 |
+   | `REPORT_HASH_SALT` | Any random 32+ character string you make up |
+
+   The salt is what lets us group abusive reports without ever storing
+   somebody's IP address. Make one up by mashing the keyboard, save it
+   somewhere safe, and don't change it later — changing it makes older
+   reports impossible to group.
+
 6. Click **Deploy** and wait a couple of minutes.
 
 When it finishes, Vercel gives you a link like `tarmac-abc123.vercel.app`.

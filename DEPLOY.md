@@ -28,26 +28,26 @@ and the non-pooled endpoint will run out.
 ## 2. Create the schema and seed it
 
 No terminal needed: open `migrations/setup.sql`, copy it, paste it into the
-Neon **SQL Editor**, and Run. It creates both tables and inserts the starter
-data, and is safe to run more than once. See `SETUP.md` for the click-by-click
-version.
+Neon **SQL Editor**, and Run. See `SETUP.md` for the click-by-click version.
+
+That file is the single definition of the schema and the seed data. It creates
+four tables (`airports`, `wait_time_reports`, `report_confirmations`,
+`airport_baselines`), adds the indexes, generates the 16,128-row baseline grid,
+and inserts starter reports only into a database that has none. It is
+idempotent and never deletes a report, so re-run it after any update that
+changes the database.
 
 From a terminal, if you prefer:
 
 ```bash
 npm install
 export DATABASE_URL='postgresql://...-pooler.../neondb?sslmode=require'
-npm run db:push    # creates the tables
-npm run db:seed    # inserts the airports + sample reports (skips if already seeded)
+npm run db:seed    # applies migrations/setup.sql
 ```
 
-If you want to keep the data already in the Replit database, dump and restore
-it instead of seeding:
-
-```bash
-pg_dump "$REPLIT_DATABASE_URL" --no-owner --no-acl -Fc -f tarmac.dump
-pg_restore -d "$DATABASE_URL" --no-owner --no-acl tarmac.dump
-```
+`npm run db:push` (drizzle-kit, straight from `shared/schema.ts`) is a
+convenience for local development. Use `db:seed` for anything real, so the
+deployed schema always matches the file people paste into Neon.
 
 ## 3. Deploy to Vercel
 
@@ -57,6 +57,10 @@ pg_restore -d "$DATABASE_URL" --no-owner --no-acl tarmac.dump
    directory (`dist/public`).
 3. Environment Variables → add for **Production, Preview and Development**:
    - `DATABASE_URL` = the pooled Neon string from step 1.
+   - `REPORT_HASH_SALT` = a random 32+ character string. Reports store a salted
+     hash of the client IP rather than the address itself; this is the salt.
+     Set it once and don't rotate it — rotating makes older hashes
+     ungroupable, which is the whole point of storing them.
 4. Deploy.
 
 `vercel.json` points the build at `npm run build:vercel`, which emits Vercel's
@@ -97,8 +101,9 @@ If the domain is on Cloudflare:
 ## 5. Turn off Replit
 
 Once the domain resolves to Vercel, stop the Replit deployment so it stops
-billing. Nothing in the repo depends on Replit anymore — `.replit` is kept
-only as a record and can be deleted.
+billing. Nothing in the repo depends on Replit — the `.replit` file and the
+old `replit.md` notes have been removed; `ARCHITECTURE.md` is the current
+technical reference.
 
 ## Costs and limits
 

@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run check
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build:vercel
+
+  # The schema and the seed data live in one SQL file that people paste into a
+  # database by hand. If it stops being runnable, or stops being safe to run
+  # twice, nobody finds out until a deployment is already broken.
+  database:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply setup.sql
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f migrations/setup.sql
+
+      - name: Apply it again — it must be idempotent
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f migrations/setup.sql
+
+      - name: Check the expected rows exist exactly once
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c "
+            DO \$\$
+            DECLARE
+              airport_count int;
+              baseline_count int;
+              report_count int;
+            BEGIN
+              SELECT count(*) INTO airport_count FROM airports;
+              SELECT count(*) INTO baseline_count FROM airport_baselines;
+              SELECT count(*) INTO report_count FROM wait_time_reports;
+
+              IF airport_count <> 32 THEN
+                RAISE EXCEPTION 'expected 32 airports, found %', airport_count;
+              END IF;
+
+              -- 32 airports x 3 line types x 7 days x 24 hours
+              IF baseline_count <> 16128 THEN
+                RAISE EXCEPTION 'expected 16128 baselines, found %', baseline_count;
+              END IF;
+
+              IF report_count <> 28 THEN
+                RAISE EXCEPTION 'expected 28 seed reports, found %', report_count;
+              END IF;
+
+              IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'wait_time_reports'
+                  AND column_name = 'reported_at'
+                  AND data_type <> 'timestamp with time zone'
+              ) THEN
+                RAISE EXCEPTION 'reported_at must be timestamptz';
+              END IF;
+            END \$\$;
+          "

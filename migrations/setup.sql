@@ -1,9 +1,19 @@
--- Tarmac: one-time database setup.
+-- Tarmac: database setup.
 -- Paste this whole file into the Neon SQL Editor and press Run.
--- It creates the tables and fills them with starter data.
--- Safe to run twice: it will not duplicate anything.
+--
+-- Safe to run repeatedly and safe to run against an existing database: it adds
+-- what is missing, backfills what is empty, and never drops a report.
+--
+-- Sections:
+--   1. Tables and columns
+--   2. Indexes
+--   3. Airports
+--   4. Baseline wait-time grid
+--   5. Sample reports (only on a database with none)
 
--- ---------- Tables ----------
+-- =====================================================================
+-- 1. Tables and columns
+-- =====================================================================
 
 CREATE TABLE IF NOT EXISTS "airports" (
 	"id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
@@ -15,6 +25,11 @@ CREATE TABLE IF NOT EXISTS "airports" (
 	CONSTRAINT "airports_code_unique" UNIQUE("code")
 );
 
+-- Wait times are driven by the local hour more than by anything else, so each
+-- airport carries its own zone rather than inheriting the server's.
+ALTER TABLE "airports" ADD COLUMN IF NOT EXISTS "timezone" text DEFAULT 'America/New_York' NOT NULL;
+ALTER TABLE "airports" ADD COLUMN IF NOT EXISTS "tier" varchar(10) DEFAULT 'small' NOT NULL;
+
 CREATE TABLE IF NOT EXISTS "wait_time_reports" (
 	"id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"airport_id" varchar NOT NULL,
@@ -22,82 +37,256 @@ CREATE TABLE IF NOT EXISTS "wait_time_reports" (
 	"checkpoint" text,
 	"terminal" text,
 	"line_type" varchar(30) DEFAULT 'standard' NOT NULL,
-	"reported_at" timestamp DEFAULT now() NOT NULL
+	"reported_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 
+-- Normalised grouping keys, so "North", "north" and "North Checkpoint" are one
+-- queue rather than three.
+ALTER TABLE "wait_time_reports" ADD COLUMN IF NOT EXISTS "checkpoint_key" text;
+ALTER TABLE "wait_time_reports" ADD COLUMN IF NOT EXISTS "terminal_key" text;
+-- Provenance. Only 'community' is ever presented as community-sourced.
+ALTER TABLE "wait_time_reports" ADD COLUMN IF NOT EXISTS "source" varchar(20) DEFAULT 'community' NOT NULL;
+-- Anti-abuse. The device id is a random per-install token, not an account;
+-- the ip hash is salted and the raw address is never stored.
+ALTER TABLE "wait_time_reports" ADD COLUMN IF NOT EXISTS "device_id" varchar(64);
+ALTER TABLE "wait_time_reports" ADD COLUMN IF NOT EXISTS "ip_hash" varchar(64);
+ALTER TABLE "wait_time_reports" ADD COLUMN IF NOT EXISTS "status" varchar(16) DEFAULT 'active' NOT NULL;
+
+-- A bare `timestamp` has no offset, so the same instant serialised two
+-- different ways gave two different answers in the browser. Existing rows were
+-- written by a UTC server, so that is how they are interpreted here.
 DO $$ BEGIN
-	ALTER TABLE "wait_time_reports" ADD CONSTRAINT "wait_time_reports_airport_id_airports_id_fk" FOREIGN KEY ("airport_id") REFERENCES "public"."airports"("id") ON DELETE no action ON UPDATE no action;
+	IF EXISTS (
+		SELECT 1 FROM information_schema.columns
+		WHERE table_name = 'wait_time_reports'
+		  AND column_name = 'reported_at'
+		  AND data_type = 'timestamp without time zone'
+	) THEN
+		ALTER TABLE "wait_time_reports"
+			ALTER COLUMN "reported_at" TYPE timestamp with time zone
+			USING "reported_at" AT TIME ZONE 'UTC';
+	END IF;
+END $$;
+
+DO $$ BEGIN
+	ALTER TABLE "wait_time_reports" ADD CONSTRAINT "wait_time_reports_airport_id_airports_id_fk"
+		FOREIGN KEY ("airport_id") REFERENCES "public"."airports"("id") ON DELETE no action ON UPDATE no action;
 EXCEPTION
 	WHEN duplicate_object THEN NULL;
 END $$;
--- ---------- Starter data ----------
 
--- Tarmac seed data: US airports plus sample wait-time reports.
--- Safe to re-run: existing airports and reports are left untouched.
+-- One-tap "still about right?" on somebody else's report. An agreement is a
+-- fresh observation of the same wait at the moment it was tapped.
+CREATE TABLE IF NOT EXISTS "report_confirmations" (
+	"id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"report_id" varchar NOT NULL,
+	"device_id" varchar(64) NOT NULL,
+	"ip_hash" varchar(64),
+	"agrees" boolean NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
 
-INSERT INTO airports (code, name, city, state, terminal_count) VALUES
-  ('ATL', 'Hartsfield-Jackson Atlanta International Airport', 'Atlanta', 'GA', 2),
-  ('LAX', 'Los Angeles International Airport', 'Los Angeles', 'CA', 9),
-  ('ORD', 'O''Hare International Airport', 'Chicago', 'IL', 4),
-  ('DFW', 'Dallas/Fort Worth International Airport', 'Dallas', 'TX', 5),
-  ('DEN', 'Denver International Airport', 'Denver', 'CO', 3),
-  ('JFK', 'John F. Kennedy International Airport', 'New York', 'NY', 6),
-  ('SFO', 'San Francisco International Airport', 'San Francisco', 'CA', 4),
-  ('SEA', 'Seattle-Tacoma International Airport', 'Seattle', 'WA', 2),
-  ('LAS', 'Harry Reid International Airport', 'Las Vegas', 'NV', 3),
-  ('MCO', 'Orlando International Airport', 'Orlando', 'FL', 4),
-  ('EWR', 'Newark Liberty International Airport', 'Newark', 'NJ', 3),
-  ('MIA', 'Miami International Airport', 'Miami', 'FL', 3),
-  ('PHX', 'Phoenix Sky Harbor International Airport', 'Phoenix', 'AZ', 3),
-  ('IAH', 'George Bush Intercontinental Airport', 'Houston', 'TX', 5),
-  ('BOS', 'Boston Logan International Airport', 'Boston', 'MA', 4),
-  ('MSP', 'Minneapolis-Saint Paul International Airport', 'Minneapolis', 'MN', 2),
-  ('DTW', 'Detroit Metropolitan Wayne County Airport', 'Detroit', 'MI', 2),
-  ('FLL', 'Fort Lauderdale-Hollywood International Airport', 'Fort Lauderdale', 'FL', 4),
-  ('PHL', 'Philadelphia International Airport', 'Philadelphia', 'PA', 7),
-  ('CLT', 'Charlotte Douglas International Airport', 'Charlotte', 'NC', 1),
-  ('LGA', 'LaGuardia Airport', 'New York', 'NY', 2),
-  ('BWI', 'Baltimore/Washington International Airport', 'Baltimore', 'MD', 1),
-  ('SLC', 'Salt Lake City International Airport', 'Salt Lake City', 'UT', 2),
-  ('DCA', 'Ronald Reagan Washington National Airport', 'Washington', 'DC', 3),
-  ('IAD', 'Washington Dulles International Airport', 'Washington', 'DC', 2),
-  ('SAN', 'San Diego International Airport', 'San Diego', 'CA', 2),
-  ('TPA', 'Tampa International Airport', 'Tampa', 'FL', 1),
-  ('PDX', 'Portland International Airport', 'Portland', 'OR', 1),
-  ('HNL', 'Daniel K. Inouye International Airport', 'Honolulu', 'HI', 2),
-  ('AUS', 'Austin-Bergstrom International Airport', 'Austin', 'TX', 1),
-  ('RSW', 'Southwest Florida International Airport', 'Fort Myers', 'FL', 1),
-  ('RHI', 'Rhinelander-Oneida County Airport', 'Rhinelander', 'WI', 1)
+DO $$ BEGIN
+	ALTER TABLE "report_confirmations" ADD CONSTRAINT "report_confirmations_report_id_fk"
+		FOREIGN KEY ("report_id") REFERENCES "public"."wait_time_reports"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+	WHEN duplicate_object THEN NULL;
+END $$;
+
+-- Expected wait per airport / line / local day / local hour. This replaces the
+-- hand-typed airport tiers and invented multipliers that used to live in code.
+-- Every row carries its own provenance, so measured data can replace modelled
+-- data one cell at a time without a deploy.
+CREATE TABLE IF NOT EXISTS "airport_baselines" (
+	"id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"airport_id" varchar NOT NULL,
+	"line_type" varchar(30) NOT NULL,
+	"day_of_week" integer NOT NULL,
+	"hour_of_day" integer NOT NULL,
+	"wait_minutes" integer NOT NULL,
+	"source" varchar(20) DEFAULT 'modeled' NOT NULL
+);
+
+DO $$ BEGIN
+	ALTER TABLE "airport_baselines" ADD CONSTRAINT "airport_baselines_airport_id_fk"
+		FOREIGN KEY ("airport_id") REFERENCES "public"."airports"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+	WHEN duplicate_object THEN NULL;
+END $$;
+
+-- =====================================================================
+-- 2. Indexes
+-- =====================================================================
+
+-- The shape every read query uses: newest rows for one airport.
+CREATE INDEX IF NOT EXISTS "wait_reports_airport_time_idx"
+	ON "wait_time_reports" ("airport_id", "reported_at" DESC);
+
+-- Rate limiting looks up recent rows for one device at one airport.
+CREATE INDEX IF NOT EXISTS "wait_reports_device_idx"
+	ON "wait_time_reports" ("device_id", "airport_id", "reported_at" DESC);
+
+CREATE INDEX IF NOT EXISTS "confirmations_report_idx"
+	ON "report_confirmations" ("report_id", "created_at" DESC);
+
+-- One vote per device per report.
+CREATE UNIQUE INDEX IF NOT EXISTS "confirmations_device_report_idx"
+	ON "report_confirmations" ("device_id", "report_id");
+
+CREATE UNIQUE INDEX IF NOT EXISTS "baselines_lookup_idx"
+	ON "airport_baselines" ("airport_id", "line_type", "day_of_week", "hour_of_day");
+
+-- =====================================================================
+-- 3. Airports
+-- =====================================================================
+
+INSERT INTO airports (code, name, city, state, terminal_count, timezone, tier) VALUES
+  ('ATL', 'Hartsfield-Jackson Atlanta International Airport', 'Atlanta', 'GA', 2, 'America/New_York', 'mega'),
+  ('LAX', 'Los Angeles International Airport', 'Los Angeles', 'CA', 9, 'America/Los_Angeles', 'mega'),
+  ('ORD', 'O''Hare International Airport', 'Chicago', 'IL', 4, 'America/Chicago', 'mega'),
+  ('DFW', 'Dallas/Fort Worth International Airport', 'Dallas', 'TX', 5, 'America/Chicago', 'mega'),
+  ('DEN', 'Denver International Airport', 'Denver', 'CO', 3, 'America/Denver', 'mega'),
+  ('JFK', 'John F. Kennedy International Airport', 'New York', 'NY', 6, 'America/New_York', 'mega'),
+  ('SFO', 'San Francisco International Airport', 'San Francisco', 'CA', 4, 'America/Los_Angeles', 'large'),
+  ('SEA', 'Seattle-Tacoma International Airport', 'Seattle', 'WA', 2, 'America/Los_Angeles', 'large'),
+  ('LAS', 'Harry Reid International Airport', 'Las Vegas', 'NV', 3, 'America/Los_Angeles', 'large'),
+  ('MCO', 'Orlando International Airport', 'Orlando', 'FL', 4, 'America/New_York', 'large'),
+  ('EWR', 'Newark Liberty International Airport', 'Newark', 'NJ', 3, 'America/New_York', 'large'),
+  ('MIA', 'Miami International Airport', 'Miami', 'FL', 3, 'America/New_York', 'large'),
+  ('PHX', 'Phoenix Sky Harbor International Airport', 'Phoenix', 'AZ', 3, 'America/Phoenix', 'large'),
+  ('IAH', 'George Bush Intercontinental Airport', 'Houston', 'TX', 5, 'America/Chicago', 'large'),
+  ('BOS', 'Boston Logan International Airport', 'Boston', 'MA', 4, 'America/New_York', 'large'),
+  ('MSP', 'Minneapolis-Saint Paul International Airport', 'Minneapolis', 'MN', 2, 'America/Chicago', 'large'),
+  ('DTW', 'Detroit Metropolitan Wayne County Airport', 'Detroit', 'MI', 2, 'America/Detroit', 'large'),
+  ('FLL', 'Fort Lauderdale-Hollywood International Airport', 'Fort Lauderdale', 'FL', 4, 'America/New_York', 'large'),
+  ('PHL', 'Philadelphia International Airport', 'Philadelphia', 'PA', 7, 'America/New_York', 'large'),
+  ('CLT', 'Charlotte Douglas International Airport', 'Charlotte', 'NC', 1, 'America/New_York', 'large'),
+  ('LGA', 'LaGuardia Airport', 'New York', 'NY', 2, 'America/New_York', 'large'),
+  ('SLC', 'Salt Lake City International Airport', 'Salt Lake City', 'UT', 2, 'America/Denver', 'large'),
+  ('IAD', 'Washington Dulles International Airport', 'Washington', 'DC', 2, 'America/New_York', 'large'),
+  ('BWI', 'Baltimore/Washington International Airport', 'Baltimore', 'MD', 1, 'America/New_York', 'medium'),
+  ('DCA', 'Ronald Reagan Washington National Airport', 'Washington', 'DC', 3, 'America/New_York', 'medium'),
+  ('SAN', 'San Diego International Airport', 'San Diego', 'CA', 2, 'America/Los_Angeles', 'medium'),
+  ('TPA', 'Tampa International Airport', 'Tampa', 'FL', 1, 'America/New_York', 'medium'),
+  ('PDX', 'Portland International Airport', 'Portland', 'OR', 1, 'America/Los_Angeles', 'medium'),
+  ('HNL', 'Daniel K. Inouye International Airport', 'Honolulu', 'HI', 2, 'Pacific/Honolulu', 'medium'),
+  ('AUS', 'Austin-Bergstrom International Airport', 'Austin', 'TX', 1, 'America/Chicago', 'medium'),
+  ('RSW', 'Southwest Florida International Airport', 'Fort Myers', 'FL', 1, 'America/New_York', 'small'),
+  ('RHI', 'Rhinelander-Oneida County Airport', 'Rhinelander', 'WI', 1, 'America/Chicago', 'small')
 ON CONFLICT (code) DO NOTHING;
 
--- Sample reports, spaced 15 minutes apart working backwards from now.
-INSERT INTO wait_time_reports (airport_id, wait_minutes, line_type, terminal, checkpoint, reported_at)
-SELECT a.id, v.wait_minutes, v.line_type, v.terminal, v.checkpoint, now() - (v.age_minutes || ' minutes')::interval
+-- Backfill zone and tier on databases seeded before those columns existed.
+UPDATE airports a SET timezone = v.timezone, tier = v.tier
 FROM (VALUES
-  ('LAX', 25, 'standard', 'Terminal 4', NULL, 360),
-  ('LAX', 8, 'tsa_precheck', 'Terminal 4', NULL, 345),
-  ('LAX', 35, 'standard', 'Terminal 7', NULL, 330),
-  ('LAX', 12, 'tsa_precheck', 'Terminal 7', NULL, 315),
-  ('JFK', 30, 'standard', 'Terminal 1', NULL, 300),
-  ('JFK', 10, 'tsa_precheck', 'Terminal 4', NULL, 285),
-  ('JFK', 5, 'clear', 'Terminal 4', NULL, 270),
-  ('ORD', 20, 'standard', 'Terminal 1', NULL, 255),
-  ('ORD', 7, 'tsa_precheck', 'Terminal 2', NULL, 240),
-  ('ORD', 40, 'standard', 'Terminal 3', NULL, 225),
-  ('ATL', 15, 'standard', 'North', 'Main', 210),
-  ('ATL', 5, 'tsa_precheck', 'South', NULL, 195),
-  ('SFO', 18, 'standard', 'Terminal 1', NULL, 180),
-  ('SFO', 6, 'clear', 'Terminal 1', NULL, 165),
-  ('DEN', 22, 'standard', 'Bridge', 'South', 150),
-  ('DEN', 10, 'tsa_precheck', 'Bridge', 'North', 135),
-  ('SEA', 15, 'standard', 'Central', 'C', 120),
-  ('SEA', 8, 'tsa_precheck', 'Central', 'C', 105),
-  ('MIA', 45, 'standard', 'North', NULL, 90),
-  ('MIA', 15, 'tsa_precheck', 'South', NULL, 75),
-  ('BOS', 12, 'standard', 'Terminal B', NULL, 60),
-  ('BOS', 3, 'clear', 'Terminal B', NULL, 45),
-  ('DFW', 28, 'standard', 'Terminal D', NULL, 30),
-  ('DFW', 9, 'tsa_precheck', 'Terminal A', NULL, 15)
-) AS v(code, wait_minutes, line_type, terminal, checkpoint, age_minutes)
+  ('ATL','America/New_York','mega'), ('LAX','America/Los_Angeles','mega'),
+  ('ORD','America/Chicago','mega'), ('DFW','America/Chicago','mega'),
+  ('DEN','America/Denver','mega'), ('JFK','America/New_York','mega'),
+  ('SFO','America/Los_Angeles','large'), ('SEA','America/Los_Angeles','large'),
+  ('LAS','America/Los_Angeles','large'), ('MCO','America/New_York','large'),
+  ('EWR','America/New_York','large'), ('MIA','America/New_York','large'),
+  ('PHX','America/Phoenix','large'), ('IAH','America/Chicago','large'),
+  ('BOS','America/New_York','large'), ('MSP','America/Chicago','large'),
+  ('DTW','America/Detroit','large'), ('FLL','America/New_York','large'),
+  ('PHL','America/New_York','large'), ('CLT','America/New_York','large'),
+  ('LGA','America/New_York','large'), ('SLC','America/Denver','large'),
+  ('IAD','America/New_York','large'), ('BWI','America/New_York','medium'),
+  ('DCA','America/New_York','medium'), ('SAN','America/Los_Angeles','medium'),
+  ('TPA','America/New_York','medium'), ('PDX','America/Los_Angeles','medium'),
+  ('HNL','Pacific/Honolulu','medium'), ('AUS','America/Chicago','medium'),
+  ('RSW','America/New_York','small'), ('RHI','America/Chicago','small')
+) AS v(code, timezone, tier)
+WHERE a.code = v.code AND (a.timezone <> v.timezone OR a.tier <> v.tier);
+
+-- =====================================================================
+-- 4. Baseline wait-time grid
+-- =====================================================================
+--
+-- 32 airports x 3 lines x 7 days x 24 hours, generated from three curves.
+-- Shape comes from published 2026 wait-time patterns:
+--   * a heavy pre-dawn origination bank, a midday trough, a lighter
+--     late-afternoon peak, and a near-empty overnight;
+--   * Mondays running ~36% above Wednesdays, weekends lighter;
+--   * PreCheck at roughly a third of standard, CLEAR lower again.
+--
+-- To replace modelled numbers with measured ones, update wait_minutes for the
+-- affected rows and set source = 'observed'. No deploy required.
+
+INSERT INTO airport_baselines (airport_id, line_type, day_of_week, hour_of_day, wait_minutes, source)
+SELECT
+	a.id,
+	l.line_type,
+	d.dow,
+	h.hour,
+	GREATEST(1, ROUND((p.base * h.mult * d.mult * l.share)::numeric))::int,
+	'modeled'
+FROM (VALUES
+	-- Typical standard-lane wait, in minutes, before time-of-day shaping.
+	('ATL', 15), ('LAX', 16), ('ORD', 15), ('DFW', 13), ('DEN', 14), ('JFK', 15),
+	('SFO', 13), ('SEA', 14), ('LAS', 13), ('MCO', 14), ('EWR', 14), ('MIA', 14),
+	('PHX', 11), ('IAH', 12), ('BOS', 13), ('MSP', 11), ('DTW', 10), ('FLL', 13),
+	('PHL', 15), ('CLT', 12), ('LGA', 13), ('SLC', 11), ('IAD', 12), ('BWI', 10),
+	('DCA', 10), ('SAN', 10), ('TPA',  9), ('PDX',  9), ('HNL', 10), ('AUS', 12),
+	('RSW',  8), ('RHI',  4)
+) AS p(code, base)
+JOIN airports a ON a.code = p.code
+CROSS JOIN (VALUES
+	(0, 0.25), (1, 0.20), (2, 0.20), (3, 0.30), (4, 0.75), (5, 1.35),
+	(6, 1.55), (7, 1.45), (8, 1.25), (9, 1.05), (10, 0.95), (11, 0.90),
+	(12, 0.90), (13, 0.90), (14, 0.95), (15, 1.05), (16, 1.15), (17, 1.20),
+	(18, 1.10), (19, 0.95), (20, 0.75), (21, 0.55), (22, 0.40), (23, 0.30)
+) AS h(hour, mult)
+CROSS JOIN (VALUES
+	-- 0 = Sunday. Monday/Wednesday ratio is ~1.36, matching published 2026 data.
+	(0, 1.20), (1, 1.25), (2, 0.95), (3, 0.92), (4, 1.00), (5, 1.15), (6, 0.90)
+) AS d(dow, mult)
+CROSS JOIN (VALUES
+	('standard', 1.00), ('tsa_precheck', 0.38), ('clear', 0.22)
+) AS l(line_type, share)
+ON CONFLICT (airport_id, line_type, day_of_week, hour_of_day) DO NOTHING;
+
+-- =====================================================================
+-- 5. Sample reports
+-- =====================================================================
+--
+-- Only inserted into a database that has none, so a real deployment is never
+-- polluted. Timestamps are staggered backwards from now so that freshness and
+-- decay behave as they would in production.
+
+INSERT INTO wait_time_reports
+	(airport_id, wait_minutes, line_type, terminal, checkpoint, terminal_key, checkpoint_key, source, status, reported_at)
+SELECT
+	a.id, v.wait_minutes, v.line_type, v.terminal, v.checkpoint,
+	v.terminal_key, v.checkpoint_key, 'community', 'active',
+	now() - (v.age_minutes || ' minutes')::interval
+FROM (VALUES
+  ('LAX', 25, 'standard',     'Terminal 4', 'North',   '4',       'north',   82),
+  ('LAX', 28, 'standard',     'Terminal 4', 'North',   '4',       'north',   64),
+  ('LAX',  8, 'tsa_precheck', 'Terminal 4', 'North',   '4',       'north',   57),
+  ('LAX', 35, 'standard',     'Terminal 7', 'South',   '7',       'south',   41),
+  ('LAX', 12, 'tsa_precheck', 'Terminal 7', 'South',   '7',       'south',   26),
+  ('JFK', 30, 'standard',     'Terminal 1', NULL,      '1',       NULL,      75),
+  ('JFK', 26, 'standard',     'Terminal 1', NULL,      '1',       NULL,      48),
+  ('JFK', 10, 'tsa_precheck', 'Terminal 4', NULL,      '4',       NULL,      33),
+  ('JFK',  5, 'clear',        'Terminal 4', NULL,      '4',       NULL,      19),
+  ('ORD', 20, 'standard',     'Terminal 1', NULL,      '1',       NULL,      70),
+  ('ORD',  7, 'tsa_precheck', 'Terminal 2', NULL,      '2',       NULL,      52),
+  ('ORD', 40, 'standard',     'Terminal 3', NULL,      '3',       NULL,      35),
+  ('ORD', 38, 'standard',     'Terminal 3', NULL,      '3',       NULL,      12),
+  ('ATL', 15, 'standard',     'North',      'Main',    'north',   'main',    66),
+  ('ATL', 18, 'standard',     'North',      'Main',    'north',   'main',    29),
+  ('ATL',  5, 'tsa_precheck', 'South',      NULL,      'south',   NULL,      14),
+  ('SFO', 18, 'standard',     'Terminal 1', NULL,      '1',       NULL,      58),
+  ('SFO',  6, 'clear',        'Terminal 1', NULL,      '1',       NULL,      22),
+  ('DEN', 22, 'standard',     'Bridge',     'South',   'bridge',  'south',   61),
+  ('DEN', 10, 'tsa_precheck', 'Bridge',     'North',   'bridge',  'north',   38),
+  ('SEA', 15, 'standard',     'Central',    'C',       'central', 'c',       55),
+  ('SEA',  8, 'tsa_precheck', 'Central',    'C',       'central', 'c',       24),
+  ('MIA', 45, 'standard',     'North',      NULL,      'north',   NULL,      50),
+  ('MIA', 15, 'tsa_precheck', 'South',      NULL,      'south',   NULL,      31),
+  ('BOS', 12, 'standard',     'Terminal B', NULL,      'b',       NULL,      44),
+  ('BOS',  3, 'clear',        'Terminal B', NULL,      'b',       NULL,      17),
+  ('DFW', 28, 'standard',     'Terminal D', NULL,      'd',       NULL,      36),
+  ('DFW',  9, 'tsa_precheck', 'Terminal A', NULL,      'a',       NULL,       8)
+) AS v(code, wait_minutes, line_type, terminal, checkpoint, terminal_key, checkpoint_key, age_minutes)
 JOIN airports a ON a.code = v.code
 WHERE NOT EXISTS (SELECT 1 FROM wait_time_reports);
