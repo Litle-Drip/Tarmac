@@ -104,5 +104,20 @@ jobs:
               IF (SELECT count(DISTINCT gate_transit_minutes) FROM airports) < 5 THEN
                 RAISE EXCEPTION 'gate transit times look unpopulated';
               END IF;
+
+              -- The model weights by observation time, so a null here would
+              -- silently drop a report out of every calculation.
+              IF EXISTS (SELECT 1 FROM wait_time_reports WHERE observed_at IS NULL) THEN
+                RAISE EXCEPTION 'every report needs an observed_at';
+              END IF;
+
+              IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'wait_time_reports'
+                  AND column_name = 'observed_at'
+                  AND (data_type <> 'timestamp with time zone' OR is_nullable <> 'NO')
+              ) THEN
+                RAISE EXCEPTION 'observed_at must be a non-null timestamptz';
+              END IF;
             END \$\$;
           "

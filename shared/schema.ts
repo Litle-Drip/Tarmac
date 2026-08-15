@@ -19,6 +19,25 @@ import { z } from "zod";
  */
 export const MAX_REPORTABLE_WAIT = 150;
 
+/**
+ * How long a report is kept before being deleted outright.
+ *
+ * Reports stop influencing what the app shows after six hours; this is about
+ * not holding data we have no use for. The privacy page states this number, so
+ * the two must stay in step.
+ */
+export const REPORT_RETENTION_DAYS = 90;
+
+/**
+ * How often one device may report the same airport. Long enough that it
+ * cannot be used to move a number, short enough that a traveller who reports
+ * on the way in and again at the gate is not blocked.
+ */
+export const REPORT_COOLDOWN_MINUTES = 20;
+
+/** Ceiling across all airports, to stop one device sweeping the map. */
+export const REPORTS_PER_DEVICE_PER_HOUR = 8;
+
 export const LINE_TYPES = ["standard", "tsa_precheck", "clear"] as const;
 export type LineType = (typeof LINE_TYPES)[number];
 
@@ -77,7 +96,23 @@ export const waitTimeReports = pgTable(
     ipHash: varchar("ip_hash", { length: 64 }),
     /** "active" counts toward wait times; "flagged" is retained but excluded. */
     status: varchar("status", { length: 16 }).notNull().default("active"),
+    /**
+     * When the report was submitted. Used for rate limiting and retention —
+     * not for weighting, see `observedAt`.
+     */
     reportedAt: timestamp("reported_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    /**
+     * When the traveller actually went through the checkpoint.
+     *
+     * People report after they clear security, not while they're in it, so
+     * submission time systematically overstates how current a report is — a
+     * 30-minute wait reported at the gate describes conditions from over half
+     * an hour ago. That bias always points the same way, so it can't average
+     * out. This is the timestamp the model weights by.
+     */
+    observedAt: timestamp("observed_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
@@ -165,10 +200,18 @@ export const airportBaselines = pgTable(
 
 export const insertAirportSchema = createInsertSchema(airports).omit({ id: true });
 
+/**
+ * How far back a report may be backdated. Beyond three hours a wait says
+ * nothing useful about current conditions, and the model would discard it
+ * anyway.
+ */
+export const MAX_OBSERVED_MINUTES_AGO = 180;
+
 export const insertWaitTimeReportSchema = createInsertSchema(waitTimeReports)
   .omit({
     id: true,
     reportedAt: true,
+    observedAt: true,
     checkpointKey: true,
     terminalKey: true,
     ipHash: true,
@@ -180,6 +223,17 @@ export const insertWaitTimeReportSchema = createInsertSchema(waitTimeReports)
     source: z.enum(OBSERVATION_SOURCES).default("community"),
     terminal: z.string().trim().max(60).nullish(),
     checkpoint: z.string().trim().max(60).nullish(),
+    /**
+     * How long ago they cleared the checkpoint. The server turns this into an
+     * absolute `observedAt`; taking an offset rather than a timestamp means a
+     * wrong clock on the phone can't backdate a report.
+     */
+    observedMinutesAgo: z
+      .number()
+      .int()
+      .min(0)
+      .max(MAX_OBSERVED_MINUTES_AGO)
+      .default(0),
   });
 
 /** What the client is allowed to send. Server-side fields are not accepted. */
@@ -247,10 +301,27 @@ export type CheckpointStats = {
 };
 
 /** A report plus its confirmation tallies, for the activity feed. */
-export type WaitTimeReportWithVotes = Omit<WaitTimeReport, "reportedAt"> & {
+export type WaitTimeReportWithVotes = Omit<
+  WaitTimeReport,
+  "reportedAt" | "observedAt"
+> & {
   reportedAt: string;
+  observedAt: string;
   agreeCount: number;
   disagreeCount: number;
+};
+
+/**
+ * What submitting a report gives back.
+ *
+ * Returning the updated estimate closes the loop — someone who has just told
+ * us what they waited can see their report land, rather than being thanked and
+ * left to wonder whether it counted.
+ */
+export type CreateReportResult = {
+  report: WaitTimeReportWithVotes;
+  wait: WaitEstimate;
+  lineType: LineType;
 };
 
 export const RISK_TOLERANCES = ["tight", "comfortable", "early"] as const;

@@ -79,6 +79,44 @@ export function rememberVote(reportId: string, agrees: boolean): void {
   }
 }
 
+/**
+ * When this browser last reported each airport.
+ *
+ * The server is the authority on the cooldown; this is so the UI can say
+ * "you can report again in 12 minutes" before somebody fills in the whole
+ * form and gets rejected at the end of it.
+ */
+const LAST_REPORT_KEY = "tarmac.last-reports";
+
+function readLastReports(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(LAST_REPORT_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return typeof parsed === "object" && parsed !== null ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+export function rememberReport(airportCode: string): void {
+  try {
+    const reports = readLastReports();
+    reports[airportCode] = Date.now();
+    localStorage.setItem(LAST_REPORT_KEY, JSON.stringify(reports));
+  } catch {
+    // Non-critical: the server still enforces the cooldown.
+  }
+}
+
+/** Minutes left before this browser may report the airport again, or 0. */
+export function cooldownRemaining(airportCode: string, cooldownMinutes: number): number {
+  const last = readLastReports()[airportCode];
+  if (!last) return 0;
+  const elapsed = (Date.now() - last) / 60_000;
+  return elapsed >= cooldownMinutes ? 0 : Math.ceil(cooldownMinutes - elapsed);
+}
+
 /** The line the traveller actually stands in, remembered between visits. */
 const LINE_KEY = "tarmac.line-type";
 

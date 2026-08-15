@@ -55,6 +55,16 @@ ALTER TABLE "wait_time_reports" ADD COLUMN IF NOT EXISTS "source" varchar(20) DE
 ALTER TABLE "wait_time_reports" ADD COLUMN IF NOT EXISTS "device_id" varchar(64);
 ALTER TABLE "wait_time_reports" ADD COLUMN IF NOT EXISTS "ip_hash" varchar(64);
 ALTER TABLE "wait_time_reports" ADD COLUMN IF NOT EXISTS "status" varchar(16) DEFAULT 'active' NOT NULL;
+-- When the traveller actually cleared the checkpoint, as opposed to when they
+-- told us. People report after they get through, so submission time
+-- systematically overstates how current a report is — a bias that always
+-- points the same way and so cannot average out. The model weights by this.
+-- Existing rows are backfilled to their submission time, which is the best we
+-- can say about them.
+ALTER TABLE "wait_time_reports" ADD COLUMN IF NOT EXISTS "observed_at" timestamp with time zone;
+UPDATE "wait_time_reports" SET "observed_at" = "reported_at" WHERE "observed_at" IS NULL;
+ALTER TABLE "wait_time_reports" ALTER COLUMN "observed_at" SET DEFAULT now();
+ALTER TABLE "wait_time_reports" ALTER COLUMN "observed_at" SET NOT NULL;
 
 -- A bare `timestamp` has no offset, so the same instant serialised two
 -- different ways gave two different answers in the browser. Existing rows were
@@ -259,10 +269,11 @@ ON CONFLICT (airport_id, line_type, day_of_week, hour_of_day) DO NOTHING;
 -- decay behave as they would in production.
 
 INSERT INTO wait_time_reports
-	(airport_id, wait_minutes, line_type, terminal, checkpoint, terminal_key, checkpoint_key, source, status, reported_at)
+	(airport_id, wait_minutes, line_type, terminal, checkpoint, terminal_key, checkpoint_key, source, status, reported_at, observed_at)
 SELECT
 	a.id, v.wait_minutes, v.line_type, v.terminal, v.checkpoint,
 	v.terminal_key, v.checkpoint_key, 'community', 'active',
+	now() - (v.age_minutes || ' minutes')::interval,
 	now() - (v.age_minutes || ' minutes')::interval
 FROM (VALUES
   ('LAX', 25, 'standard',     'Terminal 4', 'North',   '4',       'north',   82),

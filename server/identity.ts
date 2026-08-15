@@ -70,13 +70,9 @@ export function identify(req: Request): {
   };
 }
 
-/**
- * How often one device may report the same airport.
- *
- * Long enough that it cannot be used to move a number, short enough that a
- * traveller who reports on the way in and again at the gate is not blocked.
- */
-export const REPORT_COOLDOWN_MINUTES = 20;
-
-/** Ceiling across all airports, to stop one device sweeping the map. */
-export const REPORTS_PER_DEVICE_PER_HOUR = 8;
+// The limits themselves live in shared/schema.ts so the UI can tell somebody
+// how long is left before they fill in a form we're going to reject.
+export {
+  REPORT_COOLDOWN_MINUTES,
+  REPORTS_PER_DEVICE_PER_HOUR,
+} from "../shared/schema.js";

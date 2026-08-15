@@ -1,3 +1,4 @@
+import { Suspense, lazy } from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -6,15 +7,31 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
-import AirportDetail from "@/pages/airport";
+
+// The list is the entry point; the detail page carries the planner, the
+// forecast and the report form. Loading it on demand keeps the first paint
+// small, which matters because people open this on airport wifi.
+const AirportDetail = lazy(() => import("@/pages/airport"));
+const Privacy = lazy(() => import("@/pages/privacy"));
+
+function RouteFallback() {
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center">
+      <span className="sr-only">Loading</span>
+    </div>
+  );
+}
 
 function Router() {
   return (
-    <Switch>
-      <Route path="/" component={Home} />
-      <Route path="/airport/:code" component={AirportDetail} />
-      <Route component={NotFound} />
-    </Switch>
+    <Suspense fallback={<RouteFallback />}>
+      <Switch>
+        <Route path="/" component={Home} />
+        <Route path="/airport/:code" component={AirportDetail} />
+        <Route path="/privacy" component={Privacy} />
+        <Route component={NotFound} />
+      </Switch>
+    </Suspense>
   );
 }
 

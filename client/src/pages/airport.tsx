@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useParams, useLocation } from "wouter";
+import { useParams, useLocation, Link } from "wouter";
 import { motion } from "framer-motion";
 import {
   ArrowLeft, Clock, Users, Plus, Plane, TrendingUp, Shield, Zap, ShieldCheck,
@@ -19,14 +19,17 @@ import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/components/theme-provider";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
-  MAX_REPORTABLE_WAIT, LINE_TYPES,
+  MAX_REPORTABLE_WAIT, LINE_TYPES, REPORT_COOLDOWN_MINUTES,
   type AirportWithStats, type WaitTimeReportWithVotes, type CheckpointStats,
-  type LineType, type WaitEstimate,
+  type LineType, type WaitEstimate, type CreateReportResult,
 } from "@shared/schema";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { DeparturePlanner } from "@/components/departure-planner";
 import { ForecastStrip } from "@/components/forecast-strip";
-import { getPreferredLineType, setPreferredLineType, getVotedReports, rememberVote } from "@/lib/device";
+import {
+  getPreferredLineType, setPreferredLineType, getVotedReports, rememberVote,
+  rememberReport, cooldownRemaining,
+} from "@/lib/device";
 import {
   getWaitTimeColor, getWaitTimeBg, getWaitTimeLabel, timeAgo, getWaitTimeHex,
   getWaitTimeDot, getDataSourceLabel, getDataSourceStyle, getDataSourceExplanation,
@@ -186,6 +189,61 @@ function AnimatedGauge({ estimate, lineType }: { estimate: WaitEstimate; lineTyp
   );
 }
 
+/** Common waits, so most reports are one tap rather than a drag. */
+const QUICK_WAITS = [5, 10, 15, 20, 30, 45, 60];
+
+/**
+ * How long ago they cleared the checkpoint.
+ *
+ * People report from the gate, not from the line, so without asking this we
+ * stamp every report as happening now when it describes conditions from
+ * fifteen or thirty minutes earlier.
+ */
+const WHEN_OPTIONS: { minutes: number; label: string }[] = [
+  { minutes: 0, label: "Just now" },
+  { minutes: 15, label: "15 min ago" },
+  { minutes: 30, label: "30 min ago" },
+  { minutes: 60, label: "An hour ago" },
+];
+
+function ChipGroup({
+  label, children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div role="group" aria-label={label} className="flex flex-wrap gap-1.5">
+      {children}
+    </div>
+  );
+}
+
+function Chip({
+  selected, onClick, children, testId,
+}: {
+  selected: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+  testId?: string;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      onClick={onClick}
+      data-testid={testId}
+      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+        selected
+          ? "border-primary bg-primary text-primary-foreground"
+          : "border-border bg-background text-muted-foreground hover:text-foreground"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
 function ReportForm({
   airportId, airportCode, defaultLineType, onSuccess,
 }: {
@@ -194,7 +252,11 @@ function ReportForm({
   defaultLineType: LineType;
   onSuccess: () => void;
 }) {
+  // Deliberately not seeded from our own estimate. Pre-filling the number we
+  // already believe would make it self-confirming — people accept a plausible
+  // default, and our guess would quietly become "community data".
   const [waitMinutes, setWaitMinutes] = useState(15);
+  const [observedMinutesAgo, setObservedMinutesAgo] = useState(0);
   const [lineType, setLineType] = useState<LineType>(defaultLineType);
   const [terminal, setTerminal] = useState("");
   const [checkpoint, setCheckpoint] = useState("");
@@ -207,21 +269,30 @@ function ReportForm({
   });
 
   const mutation = useMutation({
-    mutationFn: async () => {
-      await apiRequest("POST", "/api/reports", {
+    mutationFn: async (): Promise<CreateReportResult> => {
+      const res = await apiRequest("POST", "/api/reports", {
         airportId,
         waitMinutes,
         lineType,
+        observedMinutesAgo,
         terminal: terminal.trim() || null,
         checkpoint: checkpoint.trim() || null,
       });
+      return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       setPreferredLineType(lineType);
+      rememberReport(airportCode);
       queryClient.invalidateQueries({ queryKey: ["/api/airports"] });
       queryClient.invalidateQueries({ queryKey: ["/api/reports", airportCode] });
       queryClient.invalidateQueries({ queryKey: ["/api/checkpoints", airportCode] });
-      toast({ title: "Thanks — report submitted", description: "You've just helped everyone else flying today." });
+
+      // Show the contribution landing. "Thanks!" tells someone nothing about
+      // whether their report mattered.
+      toast({
+        title: "Thanks — that's live",
+        description: `${airportCode} ${LINE_TYPE_SHORT_LABELS[result.lineType]} now reads ${result.wait.waitMinutes} min.`,
+      });
       onSuccess();
     },
     onError: (error: Error) => {
@@ -230,7 +301,7 @@ function ReportForm({
   });
 
   return (
-    <div className="space-y-5 sm:space-y-6">
+    <div className="space-y-5">
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <Label htmlFor="wait-slider" className="text-sm font-medium">How long was the wait?</Label>
@@ -239,7 +310,21 @@ function ReportForm({
             <span className={`text-sm font-bold ${getWaitTimeColor(waitMinutes)}`}>{waitMinutes} min</span>
           </div>
         </div>
-        <div className="px-1 py-2">
+
+        <ChipGroup label="Common wait times">
+          {QUICK_WAITS.map((minutes) => (
+            <Chip
+              key={minutes}
+              selected={waitMinutes === minutes}
+              onClick={() => setWaitMinutes(minutes)}
+              testId={`chip-wait-${minutes}`}
+            >
+              {minutes}
+            </Chip>
+          ))}
+        </ChipGroup>
+
+        <div className="px-1 pt-1">
           <Slider
             id="wait-slider"
             data-testid="slider-wait-time"
@@ -251,12 +336,22 @@ function ReportForm({
             step={5}
           />
         </div>
-        <div className="flex justify-between text-[10px] text-muted-foreground font-medium">
-          <span>0</span>
-          <span>50</span>
-          <span>100</span>
-          <span>{MAX_REPORTABLE_WAIT} min</span>
-        </div>
+      </div>
+
+      <div className="space-y-2">
+        <span className="text-sm font-medium">When did you get through?</span>
+        <ChipGroup label="When you cleared security">
+          {WHEN_OPTIONS.map((option) => (
+            <Chip
+              key={option.minutes}
+              selected={observedMinutesAgo === option.minutes}
+              onClick={() => setObservedMinutesAgo(option.minutes)}
+              testId={`chip-when-${option.minutes}`}
+            >
+              {option.label}
+            </Chip>
+          ))}
+        </ChipGroup>
       </div>
 
       <div className="space-y-2">
@@ -265,42 +360,65 @@ function ReportForm({
         <p className="text-xs text-muted-foreground">{LINE_TYPE_DESCRIPTIONS[lineType]}</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-2">
-          <Label htmlFor="terminal-input" className="text-sm font-medium">
-            Terminal <span className="text-muted-foreground font-normal">(optional)</span>
-          </Label>
-          <Input
-            id="terminal-input"
-            list="known-terminals"
-            data-testid="input-terminal"
-            placeholder="e.g., Terminal 1"
-            value={terminal}
-            onChange={(e) => setTerminal(e.target.value)}
-            className="h-11"
-            maxLength={60}
-          />
-          <datalist id="known-terminals">
-            {labels?.terminals.map((name) => <option key={name} value={name} />)}
-          </datalist>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="checkpoint-input" className="text-sm font-medium">
-            Checkpoint <span className="text-muted-foreground font-normal">(optional)</span>
-          </Label>
-          <Input
-            id="checkpoint-input"
-            list="known-checkpoints"
-            data-testid="input-checkpoint"
-            placeholder="e.g., North"
-            value={checkpoint}
-            onChange={(e) => setCheckpoint(e.target.value)}
-            className="h-11"
-            maxLength={60}
-          />
-          <datalist id="known-checkpoints">
-            {labels?.checkpoints.map((name) => <option key={name} value={name} />)}
-          </datalist>
+      <div className="space-y-3">
+        {labels && labels.checkpoints.length > 0 && (
+          <div className="space-y-2">
+            <span className="text-sm font-medium">
+              Checkpoint <span className="text-muted-foreground font-normal">(optional)</span>
+            </span>
+            <ChipGroup label="Checkpoints reported here">
+              {labels.checkpoints.slice(0, 8).map((name) => (
+                <Chip
+                  key={name}
+                  selected={checkpoint === name}
+                  onClick={() => setCheckpoint(checkpoint === name ? "" : name)}
+                  testId={`chip-checkpoint-${name}`}
+                >
+                  {name}
+                </Chip>
+              ))}
+            </ChipGroup>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <Label htmlFor="terminal-input" className="text-sm font-medium">
+              Terminal <span className="text-muted-foreground font-normal">(optional)</span>
+            </Label>
+            <Input
+              id="terminal-input"
+              list="known-terminals"
+              data-testid="input-terminal"
+              placeholder="e.g., Terminal 1"
+              value={terminal}
+              onChange={(e) => setTerminal(e.target.value)}
+              className="h-11"
+              maxLength={60}
+            />
+            <datalist id="known-terminals">
+              {labels?.terminals.map((name) => <option key={name} value={name} />)}
+            </datalist>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="checkpoint-input" className="text-sm font-medium">
+              {labels && labels.checkpoints.length > 0 ? "Or type one" : "Checkpoint"}{" "}
+              <span className="text-muted-foreground font-normal">(optional)</span>
+            </Label>
+            <Input
+              id="checkpoint-input"
+              list="known-checkpoints"
+              data-testid="input-checkpoint"
+              placeholder="e.g., North"
+              value={checkpoint}
+              onChange={(e) => setCheckpoint(e.target.value)}
+              className="h-11"
+              maxLength={60}
+            />
+            <datalist id="known-checkpoints">
+              {labels?.checkpoints.map((name) => <option key={name} value={name} />)}
+            </datalist>
+          </div>
         </div>
       </div>
 
@@ -357,6 +475,85 @@ function ReportFormContainer({
         {form}
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * "Somebody said 22 minutes eight minutes ago — still about right?"
+ *
+ * Confirming is by far the cheapest useful thing anyone can do: one tap while
+ * already holding a boarding pass, versus a form. It belongs next to the
+ * number it corrects, not four sections down the page under the planner.
+ */
+function ConfirmPrompt({
+  report, airportCode,
+}: {
+  report: WaitTimeReportWithVotes;
+  airportCode: string;
+}) {
+  const { toast } = useToast();
+  const [vote, setVote] = useState<boolean | undefined>(() => getVotedReports()[report.id]);
+
+  const mutation = useMutation({
+    mutationFn: async (agrees: boolean) => {
+      await apiRequest("POST", `/api/reports/${report.id}/confirm`, { agrees });
+      return agrees;
+    },
+    onSuccess: (agrees) => {
+      setVote(agrees);
+      rememberVote(report.id, agrees);
+      queryClient.invalidateQueries({ queryKey: ["/api/airports"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reports", airportCode] });
+      queryClient.invalidateQueries({ queryKey: ["/api/checkpoints", airportCode] });
+      toast({
+        title: agrees ? "Thanks — that counts as a fresh report" : "Thanks — we've marked it as off",
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Couldn't record that", description: error.message, variant: "destructive" });
+    },
+  });
+
+  if (vote !== undefined) return null;
+
+  return (
+    <div
+      className="flex items-center justify-between gap-3 flex-wrap rounded-lg border bg-muted/40 px-4 py-3"
+      data-testid="confirm-prompt"
+    >
+      <p className="text-sm min-w-0">
+        <span className="font-semibold">{report.waitMinutes} min</span>
+        <span className="text-muted-foreground">
+          {" "}for {LINE_TYPE_SHORT_LABELS[report.lineType as LineType] ?? "Standard"}
+          {report.checkpoint ? ` at ${report.checkpoint}` : ""}, {timeAgo(report.observedAt).toLowerCase()}.
+          Still about right?
+        </span>
+      </p>
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-9"
+          disabled={mutation.isPending}
+          onClick={() => mutation.mutate(true)}
+          data-testid="button-confirm-yes"
+        >
+          <ThumbsUp className="h-3.5 w-3.5 mr-1.5" aria-hidden="true" />
+          Yes
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-9"
+          disabled={mutation.isPending}
+          onClick={() => mutation.mutate(false)}
+          data-testid="button-confirm-no"
+        >
+          <ThumbsDown className="h-3.5 w-3.5 mr-1.5" aria-hidden="true" />
+          Way off
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -460,7 +657,7 @@ function ReportCard({
                 {report.checkpoint && <Badge variant="outline" className="text-[10px]">{report.checkpoint}</Badge>}
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {report.waitMinutes} min wait · {timeAgo(report.reportedAt)}
+                {report.waitMinutes} min wait · {timeAgo(report.observedAt)}
               </p>
             </div>
           </div>
@@ -701,6 +898,11 @@ export default function AirportDetail() {
 
   const freshness = getFreshnessInfo(airport.latestReport);
 
+  // The freshest report for the line being viewed — the one most worth
+  // confirming, and the one a traveller can actually check against.
+  const topReport = reports?.find((report) => report.lineType === lineType);
+  const cooldown = cooldownRemaining(airport.code, REPORT_COOLDOWN_MINUTES);
+
   return (
     <div
       className="min-h-screen bg-background flex flex-col"
@@ -758,9 +960,15 @@ export default function AirportDetail() {
               </div>
             </div>
 
-            <Button className="hidden sm:flex" onClick={() => setFormOpen(true)} data-testid="button-report-wait">
+            <Button
+              className="hidden sm:flex"
+              onClick={() => setFormOpen(true)}
+              disabled={cooldown > 0}
+              title={cooldown > 0 ? `You reported recently — ${cooldown} min to go` : undefined}
+              data-testid="button-report-wait"
+            >
               <Plus className="h-4 w-4 mr-1.5" aria-hidden="true" />
-              Report wait time
+              {cooldown > 0 ? `Reported — ${cooldown}m` : "Report wait time"}
             </Button>
           </motion.div>
         </div>
@@ -786,6 +994,12 @@ export default function AirportDetail() {
             </div>
           </Card>
         </motion.div>
+
+        {topReport && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.22 }}>
+            <ConfirmPrompt report={topReport} airportCode={airport.code} />
+          </motion.div>
+        )}
 
         <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.24 }}>
           <DeparturePlanner airport={airport} lineType={lineType} />
@@ -820,7 +1034,7 @@ export default function AirportDetail() {
           {reports && reports.length > 0 && (
             <p className="text-xs text-muted-foreground mb-3 flex items-start gap-1.5">
               <Info className="h-3.5 w-3.5 flex-shrink-0 mt-px" aria-hidden="true" />
-              Standing in one of these lines? Tap 👍 or 👎 — it counts as a fresh report and takes a second.
+              Standing in one of these lines? Tap 👍 or 👎 on the closest match — it counts as a fresh report and takes a second.
             </p>
           )}
 
@@ -861,9 +1075,16 @@ export default function AirportDetail() {
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 sm:hidden z-40 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]" data-testid="sticky-report-button">
-        <Button className="w-full h-14 text-base shadow-lg rounded-xl" onClick={() => setFormOpen(true)} data-testid="button-report-wait-sticky">
+        <Button
+          className="w-full h-14 text-base shadow-lg rounded-xl"
+          onClick={() => setFormOpen(true)}
+          disabled={cooldown > 0}
+          data-testid="button-report-wait-sticky"
+        >
           <Plus className="h-5 w-5 mr-2" aria-hidden="true" />
-          Report wait time
+          {cooldown > 0
+            ? `Thanks — you can report again in ${cooldown} min`
+            : "Report wait time"}
         </Button>
       </div>
 
@@ -875,9 +1096,14 @@ export default function AirportDetail() {
             <ShieldCheck className="h-4 w-4 text-muted-foreground/50" aria-hidden="true" />
             <span className="text-xs text-muted-foreground">Tarmac</span>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Wait times are crowdsourced and may not reflect actual conditions.
-          </p>
+          <div className="flex items-center gap-3">
+            <p className="text-xs text-muted-foreground">
+              Wait times are crowdsourced and may not reflect actual conditions.
+            </p>
+            <Link href="/privacy" className="text-xs text-muted-foreground underline">
+              Privacy
+            </Link>
+          </div>
         </div>
       </footer>
     </div>

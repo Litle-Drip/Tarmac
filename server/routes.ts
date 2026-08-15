@@ -227,11 +227,11 @@ export function registerRoutes(app: Express): void {
     }
 
     try {
-      const report = await storage.createReport(
+      const result = await storage.createReport(
         { ...parsed.data, deviceId, source: "community" },
         ipHash,
       );
-      return res.status(201).json(report);
+      return res.status(201).json(result);
     } catch (error) {
       if (error instanceof RateLimitError) {
         res.set("Retry-After", String(error.retryAfterMinutes * 60));
