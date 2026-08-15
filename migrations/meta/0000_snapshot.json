@@ -1,0 +1,150 @@
+{
+  "id": "888e11cc-2b05-4bea-839c-bf10dca5537a",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.airports": {
+      "name": "airports",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "code": {
+          "name": "code",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "city": {
+          "name": "city",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "state": {
+          "name": "state",
+          "type": "varchar(2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "terminal_count": {
+          "name": "terminal_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "airports_code_unique": {
+          "name": "airports_code_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "code"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.wait_time_reports": {
+      "name": "wait_time_reports",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "airport_id": {
+          "name": "airport_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "wait_minutes": {
+          "name": "wait_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "checkpoint": {
+          "name": "checkpoint",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "terminal": {
+          "name": "terminal",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "line_type": {
+          "name": "line_type",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'standard'"
+        },
+        "reported_at": {
+          "name": "reported_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "wait_time_reports_airport_id_airports_id_fk": {
+          "name": "wait_time_reports_airport_id_airports_id_fk",
+          "tableFrom": "wait_time_reports",
+          "tableTo": "airports",
+          "columnsFrom": [
+            "airport_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}
