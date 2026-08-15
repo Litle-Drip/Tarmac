@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { sql } from "drizzle-orm";
 import { storage } from "./storage";
 import { db, isDatabaseConfigured } from "./db";
-import { insertWaitTimeReportSchema } from "@shared/schema";
+import { insertWaitTimeReportSchema } from "../shared/schema";
 
 export function registerRoutes(app: Express): void {
 
