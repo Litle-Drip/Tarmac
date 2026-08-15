@@ -59,6 +59,42 @@ drifts smoothly rather than stepping at :00.
 There is a flat per-tier fallback in code for the case where the table hasn't
 been seeded. It logs a warning. It is a safety net, not a second model.
 
+### Forecasting and the departure planner
+
+`server/forecast.ts` — also pure, also an explicit `now`.
+
+A current number can't answer "when should I leave". Somebody checking at 2pm
+for a 6pm flight is asking about the evening peak. So:
+
+1. Measure **today's deviation** — the current community estimate divided by
+   the baseline for right now, clamped to [0.4, 2.5]. When we only have the
+   baseline, this is exactly 1: dividing an estimate by the baseline it came
+   from tells us nothing, and treating it as signal would let the model
+   amplify its own guess.
+2. **Decay that deviation** toward 1 with a two-hour half-life. A line running
+   double an hour from now says a lot about the next 30 minutes and very
+   little about tonight.
+3. Multiply it into the baseline for the *target* hour, so the forecast still
+   follows the day's shape.
+4. Widen the range and cap confidence by horizon.
+
+`planDeparture` then works backwards from the flight: boarding lead, gate
+transit (per airport — ATL's plane train is not a rounding error), the security
+forecast, bag drop, and a margin the traveller picks.
+
+Two decisions worth knowing:
+
+- It plans against the **top** of the forecast range, not the midpoint. Ten
+  minutes early costs nothing; ten minutes late costs the flight. That
+  asymmetry is why the model carries a range at all.
+- The forecast depends on when they reach security, which depends on the
+  forecast. It settles in two passes.
+
+Bag-drop cutoffs are returned as information rather than as a constraint that
+binds: boarding lead plus bag-drop time already exceeds every cutoff we model.
+The clamp stays as a guard so that remains an invariant rather than a
+coincidence, and a test asserts it across every combination of options.
+
 ### Local time
 
 `server/local-time.ts` resolves an instant into an airport's own wall clock via
@@ -126,6 +162,8 @@ disagree.
 | `GET /api/airports?line=` | All airports; `wait` for the requested line, `byLineType` for all three |
 | `GET /api/airports/:code?line=` | One airport, same shape |
 | `GET /api/airports/:code/labels` | Terminal/checkpoint names in use here |
+| `GET /api/airports/:code/forecast?line=&hours=` | Hourly forecast, local hours |
+| `GET /api/airports/:code/plan?departureAt=&…` | Leave-by time. `no-store` — depends on `now` |
 | `GET /api/reports/:code` | Last 6 hours, with confirmation tallies |
 | `GET /api/checkpoints/:code` | Grouped by terminal, checkpoint and line |
 | `POST /api/reports` | Requires `X-Tarmac-Device`. 429 on cooldown. |

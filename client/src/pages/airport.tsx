@@ -24,6 +24,8 @@ import {
   type LineType, type WaitEstimate,
 } from "@shared/schema";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { DeparturePlanner } from "@/components/departure-planner";
+import { ForecastStrip } from "@/components/forecast-strip";
 import { getPreferredLineType, setPreferredLineType, getVotedReports, rememberVote } from "@/lib/device";
 import {
   getWaitTimeColor, getWaitTimeBg, getWaitTimeLabel, timeAgo, getWaitTimeHex,
@@ -783,6 +785,14 @@ export default function AirportDetail() {
               </div>
             </div>
           </Card>
+        </motion.div>
+
+        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.24 }}>
+          <DeparturePlanner airport={airport} lineType={lineType} />
+        </motion.div>
+
+        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.28 }}>
+          <ForecastStrip code={airport.code} lineType={lineType} />
         </motion.div>
 
         {checkpointStats && checkpointStats.length > 0 && (

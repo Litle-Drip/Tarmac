@@ -29,6 +29,10 @@ CREATE TABLE IF NOT EXISTS "airports" (
 -- airport carries its own zone rather than inheriting the server's.
 ALTER TABLE "airports" ADD COLUMN IF NOT EXISTS "timezone" text DEFAULT 'America/New_York' NOT NULL;
 ALTER TABLE "airports" ADD COLUMN IF NOT EXISTS "tier" varchar(10) DEFAULT 'small' NOT NULL;
+-- Minutes from clearing security to standing at the gate, trains included.
+-- The departure planner is wrong without it: ATL's plane train and DFW's
+-- Skylink are the difference between a plan that works and one that doesn't.
+ALTER TABLE "airports" ADD COLUMN IF NOT EXISTS "gate_transit_minutes" integer DEFAULT 12 NOT NULL;
 
 CREATE TABLE IF NOT EXISTS "wait_time_reports" (
 	"id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
@@ -140,62 +144,64 @@ CREATE UNIQUE INDEX IF NOT EXISTS "baselines_lookup_idx"
 -- 3. Airports
 -- =====================================================================
 
-INSERT INTO airports (code, name, city, state, terminal_count, timezone, tier) VALUES
-  ('ATL', 'Hartsfield-Jackson Atlanta International Airport', 'Atlanta', 'GA', 2, 'America/New_York', 'mega'),
-  ('LAX', 'Los Angeles International Airport', 'Los Angeles', 'CA', 9, 'America/Los_Angeles', 'mega'),
-  ('ORD', 'O''Hare International Airport', 'Chicago', 'IL', 4, 'America/Chicago', 'mega'),
-  ('DFW', 'Dallas/Fort Worth International Airport', 'Dallas', 'TX', 5, 'America/Chicago', 'mega'),
-  ('DEN', 'Denver International Airport', 'Denver', 'CO', 3, 'America/Denver', 'mega'),
-  ('JFK', 'John F. Kennedy International Airport', 'New York', 'NY', 6, 'America/New_York', 'mega'),
-  ('SFO', 'San Francisco International Airport', 'San Francisco', 'CA', 4, 'America/Los_Angeles', 'large'),
-  ('SEA', 'Seattle-Tacoma International Airport', 'Seattle', 'WA', 2, 'America/Los_Angeles', 'large'),
-  ('LAS', 'Harry Reid International Airport', 'Las Vegas', 'NV', 3, 'America/Los_Angeles', 'large'),
-  ('MCO', 'Orlando International Airport', 'Orlando', 'FL', 4, 'America/New_York', 'large'),
-  ('EWR', 'Newark Liberty International Airport', 'Newark', 'NJ', 3, 'America/New_York', 'large'),
-  ('MIA', 'Miami International Airport', 'Miami', 'FL', 3, 'America/New_York', 'large'),
-  ('PHX', 'Phoenix Sky Harbor International Airport', 'Phoenix', 'AZ', 3, 'America/Phoenix', 'large'),
-  ('IAH', 'George Bush Intercontinental Airport', 'Houston', 'TX', 5, 'America/Chicago', 'large'),
-  ('BOS', 'Boston Logan International Airport', 'Boston', 'MA', 4, 'America/New_York', 'large'),
-  ('MSP', 'Minneapolis-Saint Paul International Airport', 'Minneapolis', 'MN', 2, 'America/Chicago', 'large'),
-  ('DTW', 'Detroit Metropolitan Wayne County Airport', 'Detroit', 'MI', 2, 'America/Detroit', 'large'),
-  ('FLL', 'Fort Lauderdale-Hollywood International Airport', 'Fort Lauderdale', 'FL', 4, 'America/New_York', 'large'),
-  ('PHL', 'Philadelphia International Airport', 'Philadelphia', 'PA', 7, 'America/New_York', 'large'),
-  ('CLT', 'Charlotte Douglas International Airport', 'Charlotte', 'NC', 1, 'America/New_York', 'large'),
-  ('LGA', 'LaGuardia Airport', 'New York', 'NY', 2, 'America/New_York', 'large'),
-  ('SLC', 'Salt Lake City International Airport', 'Salt Lake City', 'UT', 2, 'America/Denver', 'large'),
-  ('IAD', 'Washington Dulles International Airport', 'Washington', 'DC', 2, 'America/New_York', 'large'),
-  ('BWI', 'Baltimore/Washington International Airport', 'Baltimore', 'MD', 1, 'America/New_York', 'medium'),
-  ('DCA', 'Ronald Reagan Washington National Airport', 'Washington', 'DC', 3, 'America/New_York', 'medium'),
-  ('SAN', 'San Diego International Airport', 'San Diego', 'CA', 2, 'America/Los_Angeles', 'medium'),
-  ('TPA', 'Tampa International Airport', 'Tampa', 'FL', 1, 'America/New_York', 'medium'),
-  ('PDX', 'Portland International Airport', 'Portland', 'OR', 1, 'America/Los_Angeles', 'medium'),
-  ('HNL', 'Daniel K. Inouye International Airport', 'Honolulu', 'HI', 2, 'Pacific/Honolulu', 'medium'),
-  ('AUS', 'Austin-Bergstrom International Airport', 'Austin', 'TX', 1, 'America/Chicago', 'medium'),
-  ('RSW', 'Southwest Florida International Airport', 'Fort Myers', 'FL', 1, 'America/New_York', 'small'),
-  ('RHI', 'Rhinelander-Oneida County Airport', 'Rhinelander', 'WI', 1, 'America/Chicago', 'small')
+INSERT INTO airports (code, name, city, state, terminal_count, timezone, tier, gate_transit_minutes) VALUES
+  ('ATL', 'Hartsfield-Jackson Atlanta International Airport', 'Atlanta', 'GA', 2, 'America/New_York', 'mega', 20),
+  ('LAX', 'Los Angeles International Airport', 'Los Angeles', 'CA', 9, 'America/Los_Angeles', 'mega', 15),
+  ('ORD', 'O''Hare International Airport', 'Chicago', 'IL', 4, 'America/Chicago', 'mega', 18),
+  ('DFW', 'Dallas/Fort Worth International Airport', 'Dallas', 'TX', 5, 'America/Chicago', 'mega', 20),
+  ('DEN', 'Denver International Airport', 'Denver', 'CO', 3, 'America/Denver', 'mega', 20),
+  ('JFK', 'John F. Kennedy International Airport', 'New York', 'NY', 6, 'America/New_York', 'mega', 18),
+  ('SFO', 'San Francisco International Airport', 'San Francisco', 'CA', 4, 'America/Los_Angeles', 'large', 15),
+  ('SEA', 'Seattle-Tacoma International Airport', 'Seattle', 'WA', 2, 'America/Los_Angeles', 'large', 15),
+  ('LAS', 'Harry Reid International Airport', 'Las Vegas', 'NV', 3, 'America/Los_Angeles', 'large', 12),
+  ('MCO', 'Orlando International Airport', 'Orlando', 'FL', 4, 'America/New_York', 'large', 18),
+  ('EWR', 'Newark Liberty International Airport', 'Newark', 'NJ', 3, 'America/New_York', 'large', 15),
+  ('MIA', 'Miami International Airport', 'Miami', 'FL', 3, 'America/New_York', 'large', 16),
+  ('PHX', 'Phoenix Sky Harbor International Airport', 'Phoenix', 'AZ', 3, 'America/Phoenix', 'large', 14),
+  ('IAH', 'George Bush Intercontinental Airport', 'Houston', 'TX', 5, 'America/Chicago', 'large', 18),
+  ('BOS', 'Boston Logan International Airport', 'Boston', 'MA', 4, 'America/New_York', 'large', 13),
+  ('MSP', 'Minneapolis-Saint Paul International Airport', 'Minneapolis', 'MN', 2, 'America/Chicago', 'large', 15),
+  ('DTW', 'Detroit Metropolitan Wayne County Airport', 'Detroit', 'MI', 2, 'America/Detroit', 'large', 16),
+  ('FLL', 'Fort Lauderdale-Hollywood International Airport', 'Fort Lauderdale', 'FL', 4, 'America/New_York', 'large', 12),
+  ('PHL', 'Philadelphia International Airport', 'Philadelphia', 'PA', 7, 'America/New_York', 'large', 15),
+  ('CLT', 'Charlotte Douglas International Airport', 'Charlotte', 'NC', 1, 'America/New_York', 'large', 14),
+  ('LGA', 'LaGuardia Airport', 'New York', 'NY', 2, 'America/New_York', 'large', 12),
+  ('SLC', 'Salt Lake City International Airport', 'Salt Lake City', 'UT', 2, 'America/Denver', 'large', 15),
+  ('IAD', 'Washington Dulles International Airport', 'Washington', 'DC', 2, 'America/New_York', 'large', 18),
+  ('BWI', 'Baltimore/Washington International Airport', 'Baltimore', 'MD', 1, 'America/New_York', 'medium', 12),
+  ('DCA', 'Ronald Reagan Washington National Airport', 'Washington', 'DC', 3, 'America/New_York', 'medium', 12),
+  ('SAN', 'San Diego International Airport', 'San Diego', 'CA', 2, 'America/Los_Angeles', 'medium', 10),
+  ('TPA', 'Tampa International Airport', 'Tampa', 'FL', 1, 'America/New_York', 'medium', 14),
+  ('PDX', 'Portland International Airport', 'Portland', 'OR', 1, 'America/Los_Angeles', 'medium', 10),
+  ('HNL', 'Daniel K. Inouye International Airport', 'Honolulu', 'HI', 2, 'Pacific/Honolulu', 'medium', 14),
+  ('AUS', 'Austin-Bergstrom International Airport', 'Austin', 'TX', 1, 'America/Chicago', 'medium', 10),
+  ('RSW', 'Southwest Florida International Airport', 'Fort Myers', 'FL', 1, 'America/New_York', 'small', 10),
+  ('RHI', 'Rhinelander-Oneida County Airport', 'Rhinelander', 'WI', 1, 'America/Chicago', 'small', 5)
 ON CONFLICT (code) DO NOTHING;
 
--- Backfill zone and tier on databases seeded before those columns existed.
-UPDATE airports a SET timezone = v.timezone, tier = v.tier
+-- Backfill on databases seeded before these columns existed.
+UPDATE airports a
+SET timezone = v.timezone, tier = v.tier, gate_transit_minutes = v.transit
 FROM (VALUES
-  ('ATL','America/New_York','mega'), ('LAX','America/Los_Angeles','mega'),
-  ('ORD','America/Chicago','mega'), ('DFW','America/Chicago','mega'),
-  ('DEN','America/Denver','mega'), ('JFK','America/New_York','mega'),
-  ('SFO','America/Los_Angeles','large'), ('SEA','America/Los_Angeles','large'),
-  ('LAS','America/Los_Angeles','large'), ('MCO','America/New_York','large'),
-  ('EWR','America/New_York','large'), ('MIA','America/New_York','large'),
-  ('PHX','America/Phoenix','large'), ('IAH','America/Chicago','large'),
-  ('BOS','America/New_York','large'), ('MSP','America/Chicago','large'),
-  ('DTW','America/Detroit','large'), ('FLL','America/New_York','large'),
-  ('PHL','America/New_York','large'), ('CLT','America/New_York','large'),
-  ('LGA','America/New_York','large'), ('SLC','America/Denver','large'),
-  ('IAD','America/New_York','large'), ('BWI','America/New_York','medium'),
-  ('DCA','America/New_York','medium'), ('SAN','America/Los_Angeles','medium'),
-  ('TPA','America/New_York','medium'), ('PDX','America/Los_Angeles','medium'),
-  ('HNL','Pacific/Honolulu','medium'), ('AUS','America/Chicago','medium'),
-  ('RSW','America/New_York','small'), ('RHI','America/Chicago','small')
-) AS v(code, timezone, tier)
-WHERE a.code = v.code AND (a.timezone <> v.timezone OR a.tier <> v.tier);
+  ('ATL','America/New_York','mega',20),   ('LAX','America/Los_Angeles','mega',15),
+  ('ORD','America/Chicago','mega',18),    ('DFW','America/Chicago','mega',20),
+  ('DEN','America/Denver','mega',20),     ('JFK','America/New_York','mega',18),
+  ('SFO','America/Los_Angeles','large',15),('SEA','America/Los_Angeles','large',15),
+  ('LAS','America/Los_Angeles','large',12),('MCO','America/New_York','large',18),
+  ('EWR','America/New_York','large',15),  ('MIA','America/New_York','large',16),
+  ('PHX','America/Phoenix','large',14),   ('IAH','America/Chicago','large',18),
+  ('BOS','America/New_York','large',13),  ('MSP','America/Chicago','large',15),
+  ('DTW','America/Detroit','large',16),   ('FLL','America/New_York','large',12),
+  ('PHL','America/New_York','large',15),  ('CLT','America/New_York','large',14),
+  ('LGA','America/New_York','large',12),  ('SLC','America/Denver','large',15),
+  ('IAD','America/New_York','large',18),  ('BWI','America/New_York','medium',12),
+  ('DCA','America/New_York','medium',12), ('SAN','America/Los_Angeles','medium',10),
+  ('TPA','America/New_York','medium',14), ('PDX','America/Los_Angeles','medium',10),
+  ('HNL','Pacific/Honolulu','medium',14), ('AUS','America/Chicago','medium',10),
+  ('RSW','America/New_York','small',10),  ('RHI','America/Chicago','small',5)
+) AS v(code, timezone, tier, transit)
+WHERE a.code = v.code
+  AND (a.timezone <> v.timezone OR a.tier <> v.tier OR a.gate_transit_minutes <> v.transit);
 
 -- =====================================================================
 -- 4. Baseline wait-time grid

@@ -11,6 +11,8 @@ import { db, isDatabaseConfigured } from "./db.js";
 import {
   submitReportSchema,
   confirmReportSchema,
+  planQuerySchema,
+  forecastQuerySchema,
   LINE_TYPES,
   type LineType,
 } from "../shared/schema.js";
@@ -124,6 +126,61 @@ export function registerRoutes(app: Express): void {
       res.json(labels);
     } catch (error) {
       logAndFail(res, "fetch labels", error);
+    }
+  });
+
+  /** Hourly forecast, for the "next 12 hours" strip. */
+  app.get("/api/airports/:code/forecast", async (req, res) => {
+    const parsed = forecastQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ message: "Invalid forecast request", errors: parsed.error.flatten() });
+    }
+
+    try {
+      const forecast = await storage.getForecast(
+        req.params.code,
+        parsed.data.line,
+        parsed.data.hours,
+      );
+      if (!forecast) return res.status(404).json({ message: "Airport not found" });
+      cacheFor(res, 60);
+      res.json(forecast);
+    } catch (error) {
+      logAndFail(res, "build forecast", error);
+    }
+  });
+
+  /**
+   * The question the app exists to answer: given a flight, when should I be at
+   * the airport?
+   */
+  app.get("/api/airports/:code/plan", async (req, res) => {
+    const parsed = planQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ message: "Invalid plan request", errors: parsed.error.flatten() });
+    }
+
+    const departure = new Date(parsed.data.departureAt);
+    // A year out is not a flight anyone is planning with a security estimate.
+    const yearMs = 365 * 24 * 60 * 60 * 1000;
+    if (Math.abs(departure.getTime() - Date.now()) > yearMs) {
+      return res
+        .status(400)
+        .json({ message: "That departure time is too far away to plan for." });
+    }
+
+    try {
+      const plan = await storage.getPlan(req.params.code, parsed.data);
+      if (!plan) return res.status(404).json({ message: "Airport not found" });
+      // Depends on "now", so it must not be shared between callers.
+      res.set("Cache-Control", "no-store");
+      res.json(plan);
+    } catch (error) {
+      logAndFail(res, "build plan", error);
     }
   });
 
