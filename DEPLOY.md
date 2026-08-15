@@ -27,13 +27,18 @@ and the non-pooled endpoint will run out.
 
 ## 2. Create the schema and seed it
 
-From your laptop, with the repo cloned:
+No terminal needed: open `migrations/setup.sql`, copy it, paste it into the
+Neon **SQL Editor**, and Run. It creates both tables and inserts the starter
+data, and is safe to run more than once. See `SETUP.md` for the click-by-click
+version.
+
+From a terminal, if you prefer:
 
 ```bash
 npm install
 export DATABASE_URL='postgresql://...-pooler.../neondb?sslmode=require'
 npm run db:push    # creates the tables
-npm run db:seed    # inserts the 30 airports + sample reports (skips if already seeded)
+npm run db:seed    # inserts the airports + sample reports (skips if already seeded)
 ```
 
 If you want to keep the data already in the Replit database, dump and restore
