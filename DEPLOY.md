@@ -59,9 +59,23 @@ pg_restore -d "$DATABASE_URL" --no-owner --no-acl tarmac.dump
    - `DATABASE_URL` = the pooled Neon string from step 1.
 4. Deploy.
 
-Vercel picks up `api/index.ts` automatically as the API function, and
-`vercel.json` rewrites `/api/*` to it and everything else to `index.html` for
-client-side routing.
+`vercel.json` points the build at `npm run build:vercel`, which emits Vercel's
+[Build Output API](https://vercel.com/docs/build-output-api/v3) layout
+directly: the client goes to `.vercel/output/static`, and `api/index.ts` is
+bundled by esbuild into a single self-contained file at
+`.vercel/output/functions/api/index.func/index.js`.
+
+This is deliberate. Letting Vercel compile `api/index.ts` itself means relying
+on its TypeScript handling to resolve imports at runtime, and when that fails
+it fails only in production, as `FUNCTION_INVOCATION_FAILED`, with no local
+equivalent. Bundling ourselves leaves nothing for Vercel to resolve, and the
+exact artifact that ships can be run locally:
+
+```bash
+npm run build:vercel
+cd .vercel/output/functions/api/index.func
+DATABASE_URL='...' node -e 'require("http").createServer(require("./index.js")).listen(3000)'
+```
 
 Verify: `https://<project>.vercel.app/api/health` should return `{"ok":true}`,
 and `/api/airports` should return the airport list.
